@@ -41,8 +41,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const sceneStateRef = useRef<SceneState>("idle");
   const lastSceneKeyRef = useRef<string | null>(null);
   const shuttingDownRef = useRef(false);
+  const startingRef = useRef(false);
 
-  // ---- Scene lifetime -------------------------------------------------
   const sceneKey = useCallback((s: Scene) => {
     const sig = (s.boxes || [])
       .map((b) => `${b.kind}:${b.title ?? ""}:${b.value ?? ""}`)
@@ -102,7 +102,6 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     }, TAIL_MS);
   }, []);
 
-  // ---- Persistence ----------------------------------------------------
   const persistTurn = useCallback(async (role: "user" | "assistant", content: string) => {
     const id = conversationIdRef.current;
     if (!id) return;
@@ -131,7 +130,6 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     }
   }, []);
 
-  // ---- WebSocket ------------------------------------------------------
   const respondToFunction = useCallback((id: string, name: string, content: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -281,12 +279,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [handleAgentMessage]);
 
-  // ---- Public API -----------------------------------------------------
   const start = useCallback(async () => {
-    if (started) return;
+    if (started || startingRef.current) return;
     if (!session) return;
 
-    // Create conversation row
+    startingRef.current = true;
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
@@ -328,6 +325,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     } catch (err) {
       console.error("start error", err);
       setStatus({ mode: "error", text: "initialization failed" });
+    } finally {
+      startingRef.current = false;
     }
   }, [started, session, connectAgent, holdScene, releaseScene]);
 
@@ -339,9 +338,22 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     engineRef.current = null;
     wsRef.current?.close();
     wsRef.current = null;
+    setStarted(false);
   }, []);
 
-  useEffect(() => () => shutdown(), [shutdown]);
+  useEffect(() => {
+    const handlePageHide = () => shutdown();
+    const handleBeforeUnload = () => shutdown();
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      shutdown();
+    };
+  }, [shutdown]);
 
   return { started, status, transcript, greeting, scene, start, shutdown };
 }

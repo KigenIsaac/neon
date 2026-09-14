@@ -1,7 +1,3 @@
-/* =========================================================
-   Neon Orb — global styles
-   ========================================================= */
-
 :root {
   color-scheme: dark;
   --accent-default: #5fd0ff;
@@ -42,7 +38,6 @@ body {
   touch-action: none;
 }
 
-/* Vignette overlay */
 body::after {
   content: "";
   position: fixed;
@@ -58,9 +53,6 @@ body::after {
     );
 }
 
-/* ---------------------------------------------------------
-   Background canvas (rendered by <NeonOrb />)
-   --------------------------------------------------------- */
 #bg-canvas {
   position: fixed;
   inset: 0;
@@ -71,9 +63,6 @@ body::after {
   pointer-events: none;
 }
 
-/* ---------------------------------------------------------
-   UI overlay (greeting + status + transcript)
-   --------------------------------------------------------- */
 .ui-overlay {
   position: relative;
   z-index: 10;
@@ -127,9 +116,6 @@ body::after {
     scale(1);
 }
 
-/* ---------------------------------------------------------
-   Status container
-   --------------------------------------------------------- */
 .status-container {
   position: absolute;
   left: 50%;
@@ -234,9 +220,6 @@ body::after {
   to   { transform: scale(1.4); opacity: 1; }
 }
 
-/* ---------------------------------------------------------
-   Transcript
-   --------------------------------------------------------- */
 #transcript {
   width: 100%;
   min-height: 3rem;
@@ -265,9 +248,6 @@ body::after {
   font-style: italic;
 }
 
-/* ---------------------------------------------------------
-   Start overlay
-   --------------------------------------------------------- */
 #start-overlay {
   position: fixed;
   inset: 0;
@@ -320,9 +300,6 @@ body::after {
   50%  { opacity: 1;   transform: scale(1.03); }
 }
 
-/* ---------------------------------------------------------
-   Scene stage
-   --------------------------------------------------------- */
 #stage {
   position: fixed;
   inset: 0;
@@ -347,7 +324,6 @@ body::after {
     transform .44s cubic-bezier(.22, .85, .30, 1);
 }
 
-/* Ensure un-shown wraps never bleed through when React re-renders */
 .ill-wrap:not(.show) {
   opacity: 0;
 }
@@ -589,9 +565,6 @@ body::after {
   color: var(--accent);
 }
 
-/* ---------------------------------------------------------
-   Responsive
-   --------------------------------------------------------- */
 @media (max-width: 600px) {
   :root {
     --stage-reserve-top: 96px;

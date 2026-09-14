@@ -6,10 +6,10 @@ export const AGENT_CONFIG: AgentConfig = {
   INPUT_SAMPLE_RATE: 24000,
   OUTPUT_SAMPLE_RATE: 24000,
   STT_MODEL: "nova-3",
-  TTS_MODEL: "aura-2-asteria-en",
+  TTS_MODEL: "aura-2-zeus-en",
   LLM_PROVIDER: "open_ai",
   LLM_MODEL: "gpt-4o-mini",
-  GREETING: "Hello sir"
+  GREETING: "Hello BOSS! I am your NEON assistant. How can I help you today?"
 };
 
 export function buildSettings() {

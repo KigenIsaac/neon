@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 export async function POST() {
-  // Require a session (anonymous or otherwise)
   const supabase = await createClient();
 
   const {
@@ -27,7 +26,6 @@ export async function POST() {
     );
   }
 
-  // Correct Deepgram temporary-token endpoint
   const res = await fetch(
     "https://api.deepgram.com/v1/auth/grant",
     {

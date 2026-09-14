@@ -62,7 +62,6 @@ create policy "own scenes" on public.scenes
             where c.id = scenes.conversation_id and c.user_id = auth.uid())
   );
 
--- Auto-create profile row on new user
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin

@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Neon Orb
 
-## Getting Started
+Neon Orb is a real-time voice assistant experience built with Next.js, Deepgram, and Supabase. It captures microphone input, connects to a Deepgram conversational agent over WebSocket, renders live narrative scenes, and persists conversation state in Postgres via Supabase.
 
-First, run the development server:
+## Overview
+
+This project blends:
+
+- a cinematic, neon interface
+- real-time speech capture and playback
+- conversational AI orchestration via Deepgram
+- scene inference and visual rendering from assistant output
+- persistent memory for conversations, turns, and scene snapshots
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Supabase SSR + Postgres
+- Deepgram Voice Agent / WebSocket API
+- Custom audio engine and visual scene system
+
+## Project Structure
+
+- `app/` — Next.js routes, API endpoints, and app shell
+- `components/` — UI and visual components
+- `hooks/` — session and voice assistant state
+- `lib/` — agent config, audio, Supabase, and visual helpers
+- `supabase/migrations/` — database schema
+- `types/` — shared TypeScript contracts
+
+## Features
+
+- Anonymous or authenticated Supabase session handling
+- Deepgram token minting through a server route
+- Real-time microphone streaming to the agent
+- Assistant audio playback and response handling
+- Conversation persistence for user and assistant turns
+- Scene generation from conversation content
+- Neon orbital visual interface with motion-driven output
+
+## Local Development
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Add your environment variables in `.env.local`:
+
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   DEEPGRAM_API_KEY=your_deepgram_key
+   ```
+
+3. Run the app:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Open:
+
+   ```text
+   http://localhost:3000
+   ```
+
+## Production Build
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Important Notes
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- The Deepgram API key must be kept on the server side.
+- The browser never receives the raw secret key.
+- The app fetches a short-lived token from `/api/deepgram/token` and then connects to the Deepgram agent over WebSocket.
+- The Supabase schema in `supabase/migrations/0001_init.sql` defines the conversation, turn, and scene tables.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is for personal and experimental development use unless otherwise specified.

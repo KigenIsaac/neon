@@ -83,7 +83,6 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const boxRefs = useRef<Array<HTMLElement | null>>([]);
 
-  // Position boxes after they mount
   useLayoutEffect(() => {
     if (!scene || !stageRef.current) return;
     const nodes = boxRefs.current.filter(Boolean) as HTMLElement[];
@@ -102,7 +101,6 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
       n.style.top = rects[i].top + "px";
     });
 
-    // Trigger the show transition on the next frame
     requestAnimationFrame(() => {
       nodes.forEach((n, i) => {
         n.style.transitionDelay = `${i * 55}ms`;
@@ -111,7 +109,6 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
     });
   }, [scene]);
 
-  // Clean up old boxes when scene changes / unmounts
   useEffect(() => {
     return () => {
       boxRefs.current = [];
