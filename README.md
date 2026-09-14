@@ -12,6 +12,12 @@ This project blends:
 - scene inference and visual rendering from assistant output
 - persistent memory for conversations, turns, and scene snapshots
 
+## Overview
+
+This project is build by:
+
+- Isaac Kigen (isaackigen86@gmail.com)
+
 ## Tech Stack
 
 - Next.js 16
