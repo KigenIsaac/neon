@@ -12,7 +12,7 @@ This project blends:
 - scene inference and visual rendering from assistant output
 - persistent memory for conversations, turns, and scene snapshots
 
-## Overview
+## Authors
 
 This project is build by:
 
