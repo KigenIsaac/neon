@@ -3,8 +3,14 @@ import { useEffect, useRef } from "react";
 
 const TAU = Math.PI * 2;
 
-export function NeonOrb() {
+export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const levelRef = useRef<number>(level ?? 0);
+  const typeRef = useRef<string>(voiceType ?? "idle");
+  const displayedLevelRef = useRef<number>(0);
+
+  useEffect(() => { levelRef.current = level ?? 0; }, [level]);
+  useEffect(() => { typeRef.current = voiceType ?? "idle"; }, [voiceType]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,14 +72,32 @@ export function NeonOrb() {
     const PX = new Float32Array(N), PY = new Float32Array(N), PZ = new Float32Array(N);
     const edgeList = BALL.edges.map((e) => ({ a: e[0], b: e[1], z: 0 }));
 
-    const SHADES = Array.from({ length: 16 }, (_, i) => {
-      const t = i / 15;
-      const a = 0.08 + 0.68 * t * t;
-      return {
-        c: `rgba(${Math.round(80 + 100*t)},${Math.round(150 + 95*t)},${Math.round(215 + 40*t)},${a.toFixed(3)})`,
-        w: 0.5 + 1.7 * t
-      };
-    });
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const paletteFrom = (type: string) => {
+      switch (type) {
+        case "user":
+          return {
+            primary: { r: 255, g: 110, b: 60 },
+            mid: { r: 255, g: 85, b: 95 },
+            dark: { r: 140, g: 40, b: 30 },
+            glow: "rgba(255,120,80,0.24)"
+          };
+        case "assistant":
+          return {
+            primary: { r: 50, g: 200, b: 255 },
+            mid: { r: 30, g: 150, b: 255 },
+            dark: { r: 10, g: 40, b: 120 },
+            glow: "rgba(50,200,255,0.26)"
+          };
+        default:
+          return {
+            primary: { r: 150, g: 120, b: 255 },
+            mid: { r: 100, g: 90, b: 200 },
+            dark: { r: 30, g: 20, b: 80 },
+            glow: "rgba(120,90,255,0.14)"
+          };
+      }
+    };
 
     const PKT_N = 42;
     const pktA = new Int16Array(PKT_N), pktB = new Int16Array(PKT_N);
@@ -127,16 +151,17 @@ export function NeonOrb() {
       bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.75);
       bgGrad.addColorStop(0, "#08101f"); bgGrad.addColorStop(0.45, "#04070f"); bgGrad.addColorStop(1, "#01020a");
 
+      const pal = paletteFrom(typeRef.current);
       glowGrad = ctx.createRadialGradient(cx, cy, R * 0.4, cx, cy, R * 2.6);
-      glowGrad.addColorStop(0, "rgba(50,130,240,0.22)");
-      glowGrad.addColorStop(0.35, "rgba(30,90,200,0.09)");
-      glowGrad.addColorStop(1, "rgba(10,25,70,0)");
+      glowGrad.addColorStop(0, pal.glow);
+      glowGrad.addColorStop(0.35, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.09)`);
+      glowGrad.addColorStop(1, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0)`);
 
       glassGrad = ctx.createRadialGradient(cx - R*0.38, cy - R*0.42, R*0.05, cx, cy, R*1.04);
-      glassGrad.addColorStop(0, "rgba(150,220,255,0.10)");
-      glassGrad.addColorStop(0.42, "rgba(60,140,255,0.045)");
-      glassGrad.addColorStop(0.82, "rgba(20,60,160,0.012)");
-      glassGrad.addColorStop(1, "rgba(120,200,255,0.10)");
+      glassGrad.addColorStop(0, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
+      glassGrad.addColorStop(0.42, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.045)`);
+      glassGrad.addColorStop(0.82, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0.012)`);
+      glassGrad.addColorStop(1, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
 
       for (let i = 0; i < SONAR_N; i++) { sonarR[i] = R * 1.02; sonarA[i] = i / SONAR_N; }
 
@@ -197,14 +222,18 @@ export function NeonOrb() {
     };
 
     const drawSonar = (dt: number) => {
+      const pal = paletteFrom(typeRef.current);
+      const mapped = Math.pow(Math.max(0, Math.min(1, displayedLevelRef.current || 0)), 1.35);
       for (let i = 0; i < SONAR_N; i++) {
-        sonarA[i] -= dt * 0.5;
+        // faster decay and expansion when louder
+        sonarA[i] -= dt * (0.32 + mapped * 1.1);
         if (sonarA[i] <= 0) { sonarA[i] = 1; sonarR[i] = R * 1.02; }
-        else sonarR[i] += dt * R * 0.6;
+        else sonarR[i] += dt * R * (0.42 + mapped * 1.05);
         ctx.beginPath();
         ctx.arc(cx, cy, sonarR[i], 0, TAU);
-        ctx.strokeStyle = `rgba(90,190,255,${(sonarA[i] * 0.25).toFixed(3)})`;
-        ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},${(sonarA[i] * (0.22 + mapped * 0.45)).toFixed(3)})`;
+        ctx.lineWidth = 1 + mapped * 3;
+        ctx.stroke();
       }
     };
 
@@ -227,7 +256,11 @@ export function NeonOrb() {
 
     const drawGlobe = (t: number) => {
       const CAM = 3.0;
-      const pulse = 0.72 + 0.28 * Math.sin(t * 1.6);
+      // smooth the raw incoming level for visuals
+      displayedLevelRef.current += (levelRef.current - displayedLevelRef.current) * 0.12;
+      const amp = Math.max(0, Math.min(1, displayedLevelRef.current || 0));
+      const mapped = Math.pow(amp, 1.5);
+      const pulse = Math.min(1.9, 0.72 + 0.24 * Math.sin(t * 1.6) + mapped * 1.05);
 
       ctx.globalAlpha = pulse;
       ctx.fillStyle = glowGrad;
@@ -260,6 +293,15 @@ export function NeonOrb() {
 
       ctx.lineCap = "round";
       for (const e of edgeList) {
+        const pal = paletteFrom(typeRef.current);
+        const SHADES = Array.from({ length: 16 }, (_, i) => {
+          const t = i / 15;
+          const a = 0.08 + 0.68 * t * t;
+          const r = Math.round(lerp(pal.dark.r, pal.primary.r, t));
+          const g = Math.round(lerp(pal.dark.g, pal.primary.g, t));
+          const b = Math.round(lerp(pal.dark.b, pal.primary.b, t));
+          return { c: `rgba(${r},${g},${b},${a.toFixed(3)})`, w: 0.5 + 1.7 * t };
+        });
         const sh = SHADES[(((e.z + 1) * 0.5 * 15) | 0)];
         ctx.strokeStyle = sh.c; ctx.lineWidth = sh.w;
         ctx.beginPath();
@@ -290,10 +332,11 @@ export function NeonOrb() {
       ctx.globalCompositeOperation = "source-over";
 
       const scanA = t * 1.1;
+      const pal2 = paletteFrom(typeRef.current);
       ctx.beginPath(); ctx.arc(cx, cy, R * 1.07, scanA, scanA + 0.55);
-      ctx.strokeStyle = "rgba(80,180,255,0.10)"; ctx.lineWidth = 14; ctx.stroke();
+      ctx.strokeStyle = `rgba(${pal2.mid.r},${pal2.mid.g},${pal2.mid.b},0.10)`; ctx.lineWidth = 14; ctx.stroke();
       ctx.beginPath(); ctx.arc(cx, cy, R * 1.07, scanA, scanA + 0.55);
-      ctx.strokeStyle = "rgba(190,240,255,0.55)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = `rgba(${pal2.primary.r},${pal2.primary.g},${pal2.primary.b},0.55)`; ctx.lineWidth = 1.5; ctx.stroke();
     };
 
     const frame = (now: number) => {

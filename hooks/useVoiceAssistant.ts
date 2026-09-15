@@ -18,6 +18,7 @@ export interface UseVoiceAssistantResult {
   transcript: string;
   greeting: string;
   scene: Scene | null;
+  level: number;
   start: () => Promise<void>;
   shutdown: () => void;
 }
@@ -30,6 +31,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [scene, setScene] = useState<Scene | null>(null);
 
   const engineRef = useRef<AudioEngine | null>(null);
+  const [level, setLevel] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const settingsSentRef = useRef(false);
   const listeningRef = useRef(false);
@@ -304,6 +306,9 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
         try { ws.send(buf); } catch {}
       },
+      onInputLevel: (lvl) => {
+        setLevel(lvl ?? 0);
+      },
       onSpeakingChange: (speaking) => {
         if (speaking) holdScene();
         else releaseScene();
@@ -355,5 +360,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, greeting, scene, start, shutdown };
+  return { started, status, transcript, greeting, scene, level, start, shutdown };
 }

@@ -43,6 +43,7 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.inputRate = 24000;
+    this.lastLevel = 0;
     this.ratio = this.inputRate / sampleRate;
     this.prebufferSamples = 1440;
     this.buffer = new Float32Array(0);
@@ -101,6 +102,7 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
     this.port.postMessage({
       type: "telemetry", state: this.state,
       samples: Math.max(0, Math.floor(this.availableSamples())),
+      level: Math.max(0, Math.min(1, this.lastLevel || 0)),
       generation: this.generation
     });
   }
@@ -130,11 +132,13 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
     }
     if (this.state !== "playing") { this.maybeNotifyDrain(); this.notifyTelemetry(); return true; }
     let position = this.position; let produced = 0;
+    let maxAbs = 0;
     for (let i = 0; i < ch.length; i++) {
       const i0 = Math.floor(position), i1 = i0 + 1;
       if (i1 >= this.buffer.length) break;
       const f = position - i0;
       ch[i] = this.buffer[i0] * (1 - f) + this.buffer[i1] * f;
+      const abs = Math.abs(ch[i]); if (abs > maxAbs) maxAbs = abs;
       position += this.ratio; produced++;
     }
     const consumed = Math.floor(position);
@@ -150,6 +154,8 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
       this.port.postMessage({ type: "drained", generation: this.generation });
     }
     this.notifyTelemetry();
+    // stronger smoothing: keep peaks but decay slowly for smoother visuals
+    this.lastLevel = Math.max(maxAbs, (this.lastLevel || 0) * 0.96);
     return true;
   }
 }

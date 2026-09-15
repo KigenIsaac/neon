@@ -5,6 +5,7 @@ export interface AudioEngineCallbacks {
   onPlaybackState?: (state: string) => void;
   onDrained?: () => void;
   onSpeakingChange?: (speaking: boolean) => void;
+  onInputLevel?: (level: number, source?: string) => void;
 }
 
 export class AudioEngine {
@@ -68,6 +69,20 @@ export class AudioEngine {
     this.micWorklet.port.onmessage = (e) => {
       const d = e.data;
       if (!d || d.type !== "mic-pcm") return;
+      try {
+        const ab = d.buffer as ArrayBuffer;
+        // compute simple peak level from Int16 PCM
+        const pcm = new Int16Array(ab);
+        let max = 0;
+        for (let i = 0; i < pcm.length; i++) {
+          const v = pcm[i];
+          const abs = v < 0 ? Math.abs(v) / 32768 : v / 32767;
+          if (abs > max) max = abs;
+        }
+        this.cb.onInputLevel?.(Math.max(0, Math.min(1, max)), "mic");
+      } catch (err) {
+        // ignore
+      }
       this.cb.onMicChunk?.(d.buffer as ArrayBuffer);
     };
     this.micSource.connect(this.micWorklet);
@@ -122,6 +137,9 @@ export class AudioEngine {
   private onPlaybackMessage(d: any) {
     if (!d) return;
     switch (d.type) {
+      case "telemetry":
+        if (d.level !== undefined) this.cb.onInputLevel?.(Math.max(0, Math.min(1, Number(d.level) || 0)), "playback");
+        break;
       case "state":
         if (d.generation !== this.playbackGeneration) return;
         this.playbackState = d.state;

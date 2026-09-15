@@ -9,12 +9,12 @@ import { SceneStage } from "./SceneStage";
 
 export function VoiceConsole() {
   const { session, loading } = useSession();
-  const { started, status, transcript, greeting, scene, start } = useVoiceAssistant(session);
+  const { started, status, transcript, greeting, scene, level, start } = useVoiceAssistant(session);
   const ready = !loading && !!session;
 
   return (
     <>
-      <NeonOrb />
+      <NeonOrb voiceType={status.mode === "listening" ? "user" : status.mode === "speaking" ? "assistant" : "idle"} level={level} />
       <StartOverlay visible={!started && ready} disabled={!ready} onStart={start} />
       <SceneStage scene={scene} />
       <main className="ui-overlay">
