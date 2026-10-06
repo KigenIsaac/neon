@@ -11,58 +11,68 @@ export async function POST() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const apiKey = process.env.DEEPGRAM_API_KEY;
 
   if (!apiKey) {
+    console.error("DEEPGRAM_API_KEY is not configured");
     return NextResponse.json(
-      { error: "Server is missing DEEPGRAM_API_KEY" },
+      { error: "Voice service is not configured" },
       { status: 500 }
     );
   }
 
-  const res = await fetch(
-    "https://api.deepgram.com/v1/auth/grant",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ttl_seconds: 120,
-      }),
-      cache: "no-store",
-    }
-  );
+  try {
+    const res = await fetch(
+      "https://api.deepgram.com/v1/auth/grant",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ttl_seconds: 120,
+        }),
+        cache: "no-store",
+      }
+    );
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    const normalized = detail.trim();
+    if (!res.ok) {
+      console.error("Deepgram token mint failed", { status: res.status });
+      return NextResponse.json(
+        { error: "Unable to start voice service" },
+        { status: 502 }
+      );
+    }
+
+    const data = (await res.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
+
+    if (!data.access_token) {
+      console.error("Deepgram returned no access token");
+      return NextResponse.json(
+        { error: "Voice service returned an invalid response" },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json(
       {
-        error: "Deepgram token mint failed",
-        detail:
-          normalized || "No response body returned by Deepgram.",
-        status: res.status,
+        access_token: data.access_token,
+        expires_in: data.expires_in ?? 120,
       },
-      { status: res.status }
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    console.error("Deepgram token request failed", error);
+    return NextResponse.json(
+      { error: "Unable to start voice service" },
+      { status: 502 }
     );
   }
-
-  const data = (await res.json()) as {
-    access_token: string;
-    expires_in?: number;
-  };
-
-  return NextResponse.json({
-    access_token: data.access_token,
-    expires_in: data.expires_in ?? 120,
-  });
 }
