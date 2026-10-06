@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import type { Scene, SceneBox } from "@/types";
 import {
   ACCENTS, basePlace, planWidths, resolve,
@@ -67,8 +67,8 @@ function renderBoxContent(b: SceneBox) {
       <div className="table-grid">
         {rows.map((r, i) => {
           const pair: [string, string] = Array.isArray(r)
-            ? [r[0], r[1]]
-            : [(r as any).label, (r as any).value];
+            ? [safe(r[0]), safe(r[1])]
+            : [safe(r.label), safe(r.value)];
           return (
             <div key={i}><span>{safe(pair[0])}</span><b>{safe(pair[1])}</b></div>
           );
@@ -127,7 +127,7 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
         >
           <div
             className="ill-box"
-            style={{ ["--accent" as any]: b.accent || ACCENTS[i % ACCENTS.length] }}
+            style={{ "--accent": b.accent || ACCENTS[i % ACCENTS.length] } as CSSProperties}
           >
             <div className="ill-head">
               <i className="ill-dot" />

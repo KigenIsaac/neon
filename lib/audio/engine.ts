@@ -80,8 +80,8 @@ export class AudioEngine {
           if (abs > max) max = abs;
         }
         this.cb.onInputLevel?.(Math.max(0, Math.min(1, max)), "mic");
-      } catch (err) {
-        // ignore
+      } catch {
+        // Ignore malformed telemetry from the worklet.
       }
       this.cb.onMicChunk?.(d.buffer as ArrayBuffer);
     };
@@ -134,20 +134,28 @@ export class AudioEngine {
     this.cb.onSpeakingChange?.(false);
   }
 
-  private onPlaybackMessage(d: any) {
-    if (!d) return;
-    switch (d.type) {
+  private onPlaybackMessage(d: unknown) {
+    if (!d || typeof d !== "object") return;
+
+    const message = d as {
+      type?: "telemetry" | "state" | "drained";
+      level?: unknown;
+      generation?: number;
+      state?: "idle" | "buffering" | "playing" | "drained";
+    };
+
+    switch (message.type) {
       case "telemetry":
-        if (d.level !== undefined) this.cb.onInputLevel?.(Math.max(0, Math.min(1, Number(d.level) || 0)), "playback");
+        if (message.level !== undefined) this.cb.onInputLevel?.(Math.max(0, Math.min(1, Number(message.level) || 0)), "playback");
         break;
       case "state":
-        if (d.generation !== this.playbackGeneration) return;
-        this.playbackState = d.state;
-        this.cb.onPlaybackState?.(d.state);
-        if (d.state === "playing") this.cb.onSpeakingChange?.(true);
+        if (message.generation !== this.playbackGeneration || !message.state) return;
+        this.playbackState = message.state;
+        this.cb.onPlaybackState?.(message.state);
+        if (message.state === "playing") this.cb.onSpeakingChange?.(true);
         break;
       case "drained":
-        if (d.generation !== this.playbackGeneration) return;
+        if (message.generation !== this.playbackGeneration) return;
         this.cb.onSpeakingChange?.(false);
         this.cb.onDrained?.();
         break;

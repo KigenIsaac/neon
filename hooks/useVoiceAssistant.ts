@@ -12,6 +12,37 @@ const MAX_HOLD_MS = 120000;
 
 type SceneState = "idle" | "held" | "tail";
 
+interface AgentFunctionCall {
+  id: string;
+  name: string;
+  client_side?: boolean;
+  arguments?: string | Record<string, unknown>;
+}
+
+interface AgentMessage {
+  type?: string;
+  content?: string;
+  role?: string;
+  description?: string;
+  message?: string;
+  code?: string | number;
+  error?: { message?: string; description?: string };
+  functions?: AgentFunctionCall[];
+}
+
+interface VisualSceneArguments {
+  scene?: unknown;
+}
+
+function isScene(value: unknown): value is Scene {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as { layout?: unknown; boxes?: unknown };
+  return (
+    typeof candidate.layout === "string" &&
+    Array.isArray(candidate.boxes)
+  );
+}
+
 export interface UseVoiceAssistantResult {
   started: boolean;
   status: { mode: StatusMode; text: string };
@@ -44,6 +75,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const lastSceneKeyRef = useRef<string | null>(null);
   const shuttingDownRef = useRef(false);
   const startingRef = useRef(false);
+  const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
 
   const sceneKey = useCallback((s: Scene) => {
     const sig = (s.boxes || [])
@@ -138,7 +170,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     ws.send(JSON.stringify({ type: "FunctionCallResponse", id, name, content }));
   }, []);
 
-  const handleAgentMessage = useCallback((data: any) => {
+  const handleAgentMessage = useCallback((data: AgentMessage) => {
     switch (data.type) {
       case "Welcome": {
         const ws = wsRef.current;
@@ -148,12 +180,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         }
         break;
       }
-      case "SettingsApplied": {
+      case "SettingsApplied":
         engineRef.current?.startMicrophone();
         listeningRef.current = true;
         setStatus({ mode: "listening", text: "listening..." });
         break;
-      }
       case "UserStartedSpeaking":
         engineRef.current?.stopPlayback();
         sceneFromToolRef.current = false;
@@ -190,35 +221,51 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         engineRef.current?.signalServerDone();
         break;
       case "FunctionCallRequest": {
-        const calls = Array.isArray(data.functions) ? data.functions : [];
+        const calls = data.functions ?? [];
         for (const call of calls) {
           if (call.client_side === false) continue;
           if (call.name === "visual_scene") {
-            let parsed: any = null;
+            let parsed: VisualSceneArguments | Scene | null = null;
             try {
-              parsed = typeof call.arguments === "string"
+              const raw = typeof call.arguments === "string"
                 ? JSON.parse(call.arguments)
                 : call.arguments;
+              parsed = raw as VisualSceneArguments | Scene | null;
             } catch (err) {
               console.warn("visual_scene parse error", err);
             }
-            const nextScene: Scene | null = parsed?.scene ?? parsed;
+
+            const candidate =
+              parsed && typeof parsed === "object" && "scene" in parsed
+                ? (parsed as VisualSceneArguments).scene
+                : parsed;
+
+            const nextScene = isScene(candidate) ? candidate : null;
             sceneFromToolRef.current = true;
-            if (nextScene && Array.isArray(nextScene.boxes)) {
+
+            if (nextScene) {
               illustrate(nextScene);
               persistScene(nextScene);
             }
-            respondToFunction(call.id, call.name, nextScene ? "rendered" : "skipped");
+
+            respondToFunction(
+              call.id,
+              call.name,
+              nextScene ? "rendered" : "skipped"
+            );
             continue;
           }
+
           respondToFunction(call.id, call.name, "ok");
         }
         break;
       }
       case "Error": {
         const message =
-          data.description || data.message ||
-          data.error?.message || data.error?.description ||
+          data.description ||
+          data.message ||
+          data.error?.message ||
+          data.error?.description ||
           (data.code ? `AI error (${data.code})` : "AI error");
         setTranscript(message);
         setStatus({ mode: "error", text: message });
@@ -229,9 +276,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
   const connectAgent = useCallback(async () => {
     if (shuttingDownRef.current) return;
-    if (wsRef.current &&
-        (wsRef.current.readyState === WebSocket.OPEN ||
-         wsRef.current.readyState === WebSocket.CONNECTING)) return;
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) return;
 
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
@@ -240,7 +289,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     try {
       const res = await fetch("/api/deepgram/token", { method: "POST" });
       if (!res.ok) throw new Error(`token endpoint ${res.status}`);
-      token = (await res.json()).access_token;
+      const payload = (await res.json()) as { access_token?: unknown };
+      if (typeof payload.access_token !== "string" || !payload.access_token) {
+        throw new Error("token endpoint returned an invalid token");
+      }
+      token = payload.access_token;
     } catch (err) {
       console.error("token fetch failed", err);
       setStatus({ mode: "error", text: "token fetch failed" });
@@ -252,6 +305,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     wsRef.current = ws;
 
     ws.onopen = () => { reconnectAttemptsRef.current = 0; };
+
     ws.onmessage = async (event) => {
       if (typeof event.data !== "string") {
         const buf = event.data instanceof ArrayBuffer
@@ -262,24 +316,45 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         if (buf) engineRef.current?.playPCM(buf);
         return;
       }
-      let parsed: any;
-      try { parsed = JSON.parse(event.data); } catch { return; }
+
+      let parsed: AgentMessage;
+      try {
+        parsed = JSON.parse(event.data) as AgentMessage;
+      } catch {
+        return;
+      }
       handleAgentMessage(parsed);
     };
+
     ws.onerror = (err) => console.error("ws error", err);
+
     ws.onclose = () => {
       listeningRef.current = false;
       engineRef.current?.stopMicrophone();
       engineRef.current?.stopPlayback();
       wsRef.current = null;
+
       if (shuttingDownRef.current) return;
+
       setStatus({ mode: "error", text: "reconnecting..." });
       const attempts = reconnectAttemptsRef.current++;
       const delay = Math.min(15000, 1000 * Math.pow(1.7, attempts));
+
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = setTimeout(() => connectAgent(), delay);
+      reconnectTimerRef.current = setTimeout(() => {
+        connectAgentRef.current?.();
+      }, delay);
     };
   }, [handleAgentMessage]);
+
+  useEffect(() => {
+    connectAgentRef.current = connectAgent;
+    return () => {
+      if (connectAgentRef.current === connectAgent) {
+        connectAgentRef.current = null;
+      }
+    };
+  }, [connectAgent]);
 
   const start = useCallback(async () => {
     if (started || startingRef.current) return;
@@ -293,8 +368,10 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         body: JSON.stringify({ title: "Voice session" })
       });
       if (res.ok) {
-        const data = await res.json();
-        conversationIdRef.current = data.id;
+        const data = (await res.json()) as { id?: unknown };
+        if (typeof data.id === "string") {
+          conversationIdRef.current = data.id;
+        }
       }
     } catch (err) {
       console.warn("conversation create failed", err);
