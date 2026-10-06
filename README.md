@@ -32,45 +32,28 @@ The result is a voice-first experience where the assistant can **listen, respond
 
 ---
 
-## 🎥 Experience
+## 🎥 System Experience
 
-```text
-              USER
-                │
-                │ Voice
-                ▼
-       ┌──────────────────┐
-       │  Audio Capture   │
-       │  AudioContext /  │
-       │   AudioWorklet   │
-       └────────┬─────────┘
-                │
-                │ Streaming audio
-                ▼
-       ┌──────────────────┐
-       │    WebSocket     │
-       │  Voice Agent     │
-       └────────┬─────────┘
-                │
-                │ AI response
-                ▼
-       ┌──────────────────┐
-       │ Response / Tools │
-       └───────┬────┬─────┘
-               │    │
-        ┌──────┘    └──────────┐
-        ▼                       ▼
-┌───────────────┐       ┌────────────────┐
-│ Voice Playback │       │ Visual Scene   │
-│   & Buffering  │       │   Rendering    │
-└───────┬───────┘       └───────┬────────┘
-        │                         │
-        └───────────┬─────────────┘
-                    ▼
-             ┌─────────────┐
-             │ Supabase /  │
-             │  Postgres   │
-             └─────────────┘
+The core interaction connects browser audio capture, the Deepgram conversational agent, structured scene state, playback, and persistence.
+
+```mermaid
+flowchart LR
+    U[User] --> AC[Audio Capture]
+    AC --> WS[WebSocket]
+    WS --> DG[Deepgram Voice Agent]
+
+    DG --> AR[Audio Response]
+    DG --> CE[Conversation Events]
+    DG --> VS[visual_scene]
+
+    AR --> PB[Playback Buffer]
+    PB --> SP[Speaker]
+
+    VS --> SC[Scene State]
+    SC --> UI[Neon Orb / Visual UI]
+
+    CE --> API[Next.js API Routes]
+    API --> DB[(Supabase / PostgreSQL)]
 ```
 
 ---
@@ -96,56 +79,34 @@ The audio layer handles:
 
 This makes the application fundamentally different from a conventional request/response chatbot.
 
----
-
 ### 2. WebSocket-Based AI Communication
 
 NEON communicates with the Deepgram conversational agent through a WebSocket connection.
 
 The browser can therefore participate in a continuous conversation rather than repeatedly sending isolated HTTP requests.
 
-The architecture separates:
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Next.js Server
+    participant D as Deepgram
 
-```text
-Browser
-   ↓
-Short-lived authentication token
-   ↓
-Deepgram Voice Agent
-   ↓
-Streaming conversational events
-   ↓
-NEON interface
+    B->>S: Request temporary auth token
+    S->>D: Authenticate with server-side credential
+    D-->>S: Temporary token
+    S-->>B: Temporary token
+
+    B->>D: Open Voice Agent WebSocket
+    B->>D: Stream microphone audio
+    D-->>B: Streaming conversation events
+    D-->>B: Audio responses
 ```
-
----
 
 ### 3. Server-Side Secret Protection
 
 The Deepgram API key is not exposed directly to the browser.
 
-Instead, the application uses a server-side route to obtain a temporary authentication token:
-
-```text
-Browser
-   │
-   │ request
-   ▼
-Next.js server route
-   │
-   │ server-side secret
-   ▼
-Deepgram
-   │
-   │ temporary token
-   ▼
-Browser
-   │
-   ▼
-WebSocket Voice Agent
-```
-
-This keeps the long-lived provider credential on the server side.
+Instead, the application uses a server-side route to obtain a temporary authentication token. The long-lived provider credential remains on the server.
 
 ---
 
@@ -155,21 +116,15 @@ NEON does not treat the assistant's output as audio alone.
 
 The application includes a structured `visual_scene` interaction that allows conversational output to drive visual state.
 
-Conceptually:
-
-```text
-Conversation
-      ↓
-Structured AI interaction
-      ↓
-visual_scene
-      ↓
-Scene state
-      ↓
-Visual interface
+```mermaid
+flowchart TD
+    C[Conversation] --> T[Structured AI Interaction]
+    T --> V[visual_scene]
+    V --> S[Scene State]
+    S --> R[Visual Interface]
 ```
 
-This allows the assistant to influence the interface in a structured way rather than relying entirely on free-form text interpretation.
+This allows the assistant to influence the interface through structured state rather than relying entirely on free-form text interpretation.
 
 ---
 
@@ -184,7 +139,37 @@ The persistence layer covers concepts including:
 - Scene snapshots
 - User/session state
 
-This means the application can treat a conversation as a persistent software object rather than an ephemeral browser interaction.
+The resulting model treats a conversation as a persistent software object rather than an ephemeral browser interaction.
+
+```mermaid
+erDiagram
+    USER_SESSION ||--o{ CONVERSATION : owns
+    CONVERSATION ||--o{ CONVERSATION_TURN : contains
+    CONVERSATION ||--o{ SCENE_SNAPSHOT : produces
+
+    USER_SESSION {
+        string id
+    }
+
+    CONVERSATION {
+        string id
+        string user_id
+    }
+
+    CONVERSATION_TURN {
+        string id
+        string conversation_id
+        string role
+        text content
+    }
+
+    SCENE_SNAPSHOT {
+        string id
+        string conversation_id
+        string turn_id
+        json scene
+    }
+```
 
 ---
 
@@ -194,54 +179,43 @@ The application integrates Supabase authentication/session handling and server-s
 
 The database layer uses Supabase/Postgres and includes row-level security policies for data access.
 
-The architecture therefore separates:
-
-```text
-Identity
-   ↓
-Session
-   ↓
-Authorized API access
-   ↓
-Persistent conversation data
+```mermaid
+flowchart TD
+    I[Identity] --> S[Authenticated Session]
+    S --> A[Authorized API Request]
+    A --> P[Persistent Conversation Data]
+    P --> RLS[Supabase Row-Level Security]
 ```
+
+The server-side routes validate authenticated access before allowing conversation data to be created or modified.
 
 ---
 
 ## ⚡ Audio Architecture
 
-The audio engine is one of the most technically interesting parts of the project.
+The audio engine is one of the technically interesting parts of the project.
 
-```text
-Microphone
-    ↓
-MediaStream
-    ↓
-AudioContext
-    ↓
-AudioWorklet
-    ↓
-PCM processing
-    ↓
-Resampling
-    ↓
-24 kHz stream
-    ↓
-Voice Agent
+### Capture and streaming
+
+```mermaid
+flowchart LR
+    M[Microphone] --> MS[MediaStream]
+    MS --> AC[AudioContext]
+    AC --> AW[AudioWorklet]
+    AW --> PCM[PCM Processing]
+    PCM --> RS[Resampling]
+    RS --> K[24 kHz Stream]
+    K --> D[Voice Agent]
 ```
 
-For playback:
+### Playback
 
-```text
-Voice Agent
-    ↓
-Audio data
-    ↓
-Playback buffer
-    ↓
-AudioContext
-    ↓
-Speaker
+```mermaid
+flowchart LR
+    D[Voice Agent] --> A[Audio Data]
+    A --> B[Playback Buffer]
+    B --> C[AudioContext]
+    C --> S[Speaker]
 ```
 
 The application also tracks audio-related telemetry used by the interface.
@@ -252,16 +226,13 @@ The application also tracks audio-related telemetry used by the interface.
 
 The visual interface uses a reactive orbital design.
 
-The orb responds to interaction and voice-related state, creating a visual connection between:
+The orb responds to interaction and voice-related state, creating a visual connection between the voice system and the interface.
 
-```text
-Voice
- ↓
-Audio level / state
- ↓
-Application state
- ↓
-Orb animation
+```mermaid
+flowchart LR
+    V[Voice / Audio State] --> AS[Application State]
+    AS --> AO[Orb Animation]
+    AO --> UI[Visual Feedback]
 ```
 
 The result is intended to make the assistant feel **present and responsive** rather than like a static webpage.
@@ -274,30 +245,23 @@ The repository is organized around the following major areas:
 
 ```text
 neon/
-│
 ├── app/
 │   ├── routes
 │   ├── API endpoints
 │   └── application shell
-│
 ├── components/
 │   └── UI + visual components
-│
 ├── hooks/
 │   └── application/session/voice state
-│
 ├── lib/
 │   ├── AI/agent configuration
 │   ├── audio engine
 │   ├── Supabase integration
 │   └── visual helpers
-│
 ├── supabase/
 │   └── database migrations
-│
 ├── types/
 │   └── shared TypeScript contracts
-│
 └── proxy.ts
 ```
 
@@ -413,6 +377,8 @@ npm run typecheck
 npm run build
 ```
 
+CI additionally runs a production dependency audit with `npm audit --omit=dev --audit-level=high`.
+
 ---
 
 ## 🔑 Environment Variables
@@ -432,17 +398,12 @@ The Deepgram secret should remain server-side.
 
 The Supabase migrations define the application's persistent conversation model.
 
-Conceptually:
-
-```text
-User / Session
-      │
-      ▼
-Conversation
-      │
-      ├───────────────┐
-      ▼               ▼
-Conversation Turn   Scene Snapshot
+```mermaid
+flowchart TD
+    US[User / Session] --> C[Conversation]
+    C --> T[Conversation Turn]
+    C --> SS[Scene Snapshot]
+    T -. optional relationship .-> SS
 ```
 
 This provides a foundation for persistent conversational experiences and structured visual state.
@@ -497,71 +458,19 @@ The interface should communicate system state instead of leaving the user wonder
 
 The project brings together several areas that normally live in separate systems:
 
-```text
-Web application
-      +
-Authentication
-      +
-Database persistence
-      +
-Real-time WebSockets
-      +
-Voice streaming
-      +
-Audio processing
-      +
-Conversational AI
-      +
-Structured tool interaction
-      +
-Interactive visualization
+```mermaid
+flowchart LR
+    WEB[Web Application] --- AUTH[Authentication]
+    AUTH --- DB[Database Persistence]
+    DB --- WS[Real-Time WebSockets]
+    WS --- VOICE[Voice Streaming]
+    VOICE --- AUDIO[Audio Processing]
+    AUDIO --- AI[Conversational AI]
+    AI --- TOOLS[Structured Tool Interaction]
+    TOOLS --- UI[Interactive Visualization]
 ```
 
 The interesting engineering problem is making these components behave like **one coherent real-time system**.
-
----
-
-## 📊 High-Level Data Flow
-
-```text
-┌───────────────┐
-│     User      │
-└───────┬───────┘
-        │
-        │ Voice
-        ▼
-┌───────────────┐
-│ Audio Engine  │
-└───────┬───────┘
-        │
-        │ WebSocket
-        ▼
-┌───────────────┐
-│ Deepgram      │
-│ Voice Agent   │
-└───────┬───────┘
-        │
-        ├───────────────► Audio response
-        │
-        ├───────────────► Conversation events
-        │
-        └───────────────► Structured scene interaction
-                              │
-                              ▼
-                     ┌────────────────┐
-                     │   Neon Orb     │
-                     │   UI / Scene   │
-                     └────────────────┘
-
-Conversation events
-        │
-        ▼
-┌────────────────────┐
-│ Next.js / Supabase │
-└─────────┬──────────┘
-          ▼
-     PostgreSQL
-```
 
 ---
 
@@ -594,7 +503,7 @@ Software Developer focused on:
 
 NEON is an experimental real-time AI application and an ongoing engineering project.
 
-CI runs linting, TypeScript checking, and a production build on pushes and pull requests.
+CI runs linting, TypeScript checking, a production dependency audit, and a production build on pushes and pull requests.
 
 The architecture is intentionally designed to explore the intersection of:
 
