@@ -8,7 +8,7 @@
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8A?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
 [![Deepgram](https://img.shields.io/badge/Deepgram-Voice%20AI-101828?style=flat-square)](https://deepgram.com/)
 
-**Live application:** https://neon-gamma-steel.vercel.app
+**Live application:** https://neon-ai-sage.ercel.app
 
 ---
 
