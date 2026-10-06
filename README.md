@@ -7,6 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8A?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
 [![Deepgram](https://img.shields.io/badge/Deepgram-Voice%20AI-101828?style=flat-square)](https://deepgram.com/)
+[![CI](https://github.com/KigenIsaac/neon/actions/workflows/ci.yml/badge.svg)](https://github.com/KigenIsaac/neon/actions/workflows/ci.yml)
 
 **Live application:** https://neon-ai-sage.vercel.app
 
@@ -359,15 +360,22 @@ npm install
 
 ### 3. Configure environment variables
 
-Create `.env.local`:
+Copy `.env.example` to `.env.local`:
+
+```bash
+cp .env.example .env.local
+```
+
+Then set:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 DEEPGRAM_API_KEY=your_deepgram_key
+NEXT_PUBLIC_ENABLE_ANON_AUTH=true
 ```
 
-Never commit real API keys.
+Never commit real credentials.
 
 ### 4. Start development
 
@@ -397,10 +405,12 @@ Start the production server:
 npm start
 ```
 
-Run linting:
+Run the engineering checks:
 
 ```bash
 npm run lint
+npm run typecheck
+npm run build
 ```
 
 ---
@@ -411,7 +421,8 @@ npm run lint
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public client key |
-| `DEEPGRAM_API_KEY` | Server-side Deepgram credential |
+| `DEEPGRAM_API_KEY` | Server-only Deepgram credential |
+| `NEXT_PUBLIC_ENABLE_ANON_AUTH` | Enables automatic anonymous Supabase session bootstrap |
 
 The Deepgram secret should remain server-side.
 
@@ -448,7 +459,9 @@ Important considerations when deploying:
 - Never expose `DEEPGRAM_API_KEY` to client-side code
 - Use Supabase Row-Level Security for user data
 - Validate authenticated requests server-side
+- Limit persisted request payloads
 - Treat temporary provider tokens as short-lived credentials
+- Use baseline browser security headers
 - Review database policies before production use
 - Restrict sensitive server routes appropriately
 
@@ -580,6 +593,8 @@ Software Developer focused on:
 ## 📌 Project Status
 
 NEON is an experimental real-time AI application and an ongoing engineering project.
+
+CI runs linting, TypeScript checking, and a production build on pushes and pull requests.
 
 The architecture is intentionally designed to explore the intersection of:
 
