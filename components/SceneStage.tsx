@@ -62,10 +62,12 @@ function renderBoxContent(b: SceneBox) {
     );
   }
   if (kind === "table") {
-    const rows = (b.rows || b.items || []).slice(0, 7);
+    const rows: Array<[string, string] | { label: string; value: string }> =
+      b.rows ?? (b.items ?? []).map((item) => [item, ""] as [string, string]);
+
     return (
       <div className="table-grid">
-        {rows.map((r, i) => {
+        {rows.slice(0, 7).map((r, i) => {
           const pair: [string, string] = Array.isArray(r)
             ? [safe(r[0]), safe(r[1])]
             : [safe(r.label), safe(r.value)];
