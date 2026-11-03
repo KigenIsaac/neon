@@ -30,7 +30,12 @@ export class NativePcmPlayer {
   private packetGaps = 0;
   private lastDiagnosticAt = -Infinity;
 
-  constructor(private context: AudioContext, private cb: PlaybackCallbacks = {}) {
+  private context: AudioContext;
+  private cb: PlaybackCallbacks;
+
+  constructor(context: AudioContext, cb: PlaybackCallbacks = {}) {
+    this.context = context;
+    this.cb = cb;
     this.gain = context.createGain();
     this.gain.gain.value = 0.96;
     this.gain.connect(context.destination);
