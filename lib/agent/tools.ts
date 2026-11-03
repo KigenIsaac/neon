@@ -68,7 +68,7 @@ export function calculateExpression(expression: string): number {
 
 export interface ToolOptions {
   signal?: AbortSignal;
-  confirmSave: (note: string) => boolean;
+  confirmSave: (note: string) => boolean | Promise<boolean>;
 }
 
 async function readResponse(res: Response): Promise<Record<string, unknown>> {
@@ -112,7 +112,7 @@ export async function runAgentTool(
     case "save_note": {
       const note = typeof args.content === "string" ? args.content.trim() : "";
       if (!note || note.length > 600) throw new Error("Note must be between 1 and 600 characters");
-      if (!options.confirmSave(note)) return JSON.stringify({ saved: false, reason: "User declined" });
+      if (!(await options.confirmSave(note))) return JSON.stringify({ saved: false, reason: "User declined" });
       if (options.signal?.aborted) return JSON.stringify({ saved: false, reason: "Cancelled" });
       const res = await fetch("/api/notes", {
         method: "POST",
