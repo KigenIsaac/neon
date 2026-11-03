@@ -12,7 +12,12 @@ export const AGENT_CONFIG: AgentConfig = {
   GREETING: "Hello BOSS! I am your NEON assistant. How can I help you today?"
 };
 
-export function buildSettings() {
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function buildSettings(history: HistoryTurn[] = []) {
   return {
     type: "Settings",
     audio: {
@@ -24,6 +29,15 @@ export function buildSettings() {
       }
     },
     agent: {
+      ...(history.length ? {
+        context: {
+          messages: history.slice(-24).map((turn) => ({
+            type: "History",
+            role: turn.role,
+            content: turn.content.slice(0, 2000)
+          }))
+        }
+      } : {}),
       language: "en",
       listen: {
         provider: { type: "deepgram", model: AGENT_CONFIG.STT_MODEL, smart_format: false }
