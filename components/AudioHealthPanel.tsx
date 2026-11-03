@@ -9,7 +9,6 @@ export function AudioHealthPanel({
   speechInterruptions: number;
   onClose: () => void;
 }) {
-
   return (
     <section className="audio-health-panel" aria-label="Local audio health diagnostics">
       <div className="audio-health-heading">
@@ -19,7 +18,7 @@ export function AudioHealthPanel({
       <dl>
         <div><dt>Deepgram voice stream</dt><dd>{diagnostics ? diagnostics.outputSampleRate.toLocaleString() + " Hz" : "Awaiting audio"}</dd></div>
         <div><dt>Recent audio queued</dt><dd>{diagnostics ? diagnostics.queuedMs + " ms" : "—"}</dd></div>
-        <div><dt>Detected packet gaps</dt><dd>{diagnostics?.packetGaps ?? 0}</dd></div>
+        <div><dt>Estimated packet gaps</dt><dd>{diagnostics?.packetGaps ?? 0}</dd></div>
         <div><dt>Speech interruptions</dt><dd>{speechInterruptions}</dd></div>
         <div><dt>Output latency</dt><dd>{diagnostics?.outputLatencyMs !== null && diagnostics?.outputLatencyMs !== undefined ? diagnostics.outputLatencyMs + " ms" : "Not reported"}</dd></div>
         <div><dt>Microphone input</dt><dd>{microphoneDevice || "Muted or browser-managed microphone"}</dd></div>
