@@ -9,11 +9,12 @@ import { TranscriptPanel } from "./TranscriptPanel";
 import { SceneStage } from "./SceneStage";
 import { NotesPanel } from "./NotesPanel";
 import { SaveNoteDialog } from "./SaveNoteDialog";
+import { TranscriptDrawer } from "./TranscriptDrawer";
 
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
-    started, status, transcript, greeting, scene, level, muted,
+    started, status, transcript, messages, greeting, scene, level, muted,
     pendingSaveNote, resolveSaveNote,
     start, shutdown, retry, toggleMute, sendText
   } = useVoiceAssistant(session);
@@ -21,6 +22,7 @@ export function VoiceConsole() {
   const [sendError, setSendError] = useState("");
   const [recent, setRecent] = useState<RecentConversation[]>([]);
   const [showNotes, setShowNotes] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
   const ready = !loading && !!session;
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export function VoiceConsole() {
       />
       <SceneStage scene={scene} />
       {started && showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
+      {started && showTranscript && <TranscriptDrawer messages={messages} onClose={() => setShowTranscript(false)} />}
       {pendingSaveNote !== null && <SaveNoteDialog note={pendingSaveNote} onDecision={resolveSaveNote} />}
       <main className="ui-overlay">
         <div id="greeting" className={greeting ? "show" : ""}>{greeting}</div>
@@ -95,6 +98,7 @@ export function VoiceConsole() {
               {sendError && <p className="input-error" role="alert">{sendError}</p>}
               <div className="voice-actions" role="group" aria-label="Voice session controls">
                 <button type="button" onClick={() => setShowNotes(true)}>Saved notes</button>
+                <button type="button" onClick={() => setShowTranscript(true)}>Transcript</button>
                 <button type="button" onClick={() => { void toggleMute(); }}
                   aria-pressed={muted}>
                   {muted ? "Unmute mic" : "Mute mic"}
