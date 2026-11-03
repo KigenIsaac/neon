@@ -68,7 +68,10 @@ export class NativePcmPlayer {
     node.connect(this.gain);
 
     const now = this.context.currentTime;
-    const earliest = now + START_AHEAD_SECONDS;
+    // Give the very first packet a tiny device startup cushion. During an
+    // active response, schedule as close to the clock as possible so late
+    // packets do not acquire a fresh 25 ms gap at every chunk boundary.
+    const earliest = now + (this.nodes.size === 0 ? START_AHEAD_SECONDS : 0.005);
     const scheduledStart = Math.max(earliest, this.cursor);
     const gap = this.speaking && this.cursor > 0
       ? scheduledStart - this.cursor : 0;
