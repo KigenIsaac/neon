@@ -14,6 +14,16 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+
+  if (!apiKey) {
+    console.error("DEEPGRAM_API_KEY is not configured");
+    return NextResponse.json(
+      { error: "Voice service is not configured" },
+      { status: 500 }
+    );
+  }
+
   // PostgreSQL RPC makes this limit atomic across serverless instances.
   // Fail closed if the security migration has not been applied.
   const { data: allowed, error: quotaError } = await supabase.rpc(
@@ -30,16 +40,6 @@ export async function POST() {
     return NextResponse.json(
       { error: "Voice session limit reached. Try again later." },
       { status: 429, headers: { "Retry-After": "3600", "Cache-Control": "no-store" } }
-    );
-  }
-
-  const apiKey = process.env.DEEPGRAM_API_KEY;
-
-  if (!apiKey) {
-    console.error("DEEPGRAM_API_KEY is not configured");
-    return NextResponse.json(
-      { error: "Voice service is not configured" },
-      { status: 500 }
     );
   }
 
