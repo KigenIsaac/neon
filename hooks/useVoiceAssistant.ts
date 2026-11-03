@@ -50,7 +50,7 @@ export interface UseVoiceAssistantResult {
   muted: boolean;
   pendingSaveNote: string | null;
   resolveSaveNote: (approved: boolean) => void;
-  start: (conversationId?: string) => Promise<void>;
+  start: (conversationId?: string, mode?: "voice" | "text") => Promise<void>;
   shutdown: () => void;
   retry: () => Promise<void>;
   toggleMute: () => Promise<void>;
@@ -72,6 +72,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [pendingSaveNote, setPendingSaveNote] = useState<string | null>(null);
   const saveDecisionRef = useRef<((approved: boolean) => void) | null>(null);
   const mutedRef = useRef(false);
+  const textOnlyRef = useRef(false);
   const pendingCallsRef = useRef(new Map<string, AbortController>());
   const wsRef = useRef<WebSocket | null>(null);
   const settingsSentRef = useRef(false);
@@ -223,7 +224,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
           listeningRef.current = true;
           setStatus({ mode: "listening", text: "listening..." });
         } else {
-          setStatus({ mode: "idle", text: "microphone muted" });
+          setStatus({ mode: "idle", text: textOnlyRef.current ? "text mode" : "microphone muted" });
         }
         break;
       case "UserStartedSpeaking":
@@ -504,14 +505,15 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [connectAgent]);
 
-  const start = useCallback(async (existingConversationId?: string) => {
+  const start = useCallback(async (existingConversationId?: string, mode: "voice" | "text" = "voice") => {
     if (started || startingRef.current) return;
     if (!session) return;
 
     startingRef.current = true;
     shuttingDownRef.current = false;
-    mutedRef.current = false;
-    setMuted(false);
+    textOnlyRef.current = mode === "text";
+    mutedRef.current = textOnlyRef.current;
+    setMuted(textOnlyRef.current);
     reconnectAttemptsRef.current = 0;
     conversationIdRef.current = null;
     recentHistoryRef.current = [];
@@ -567,7 +569,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     engineRef.current = engine;
 
     try {
-      await engine.initialize();
+      await engine.initialize({ microphone: mode === "voice" });
       setGreeting("");
       setStarted(true);
       setStatus({ mode: "thinking", text: "starting..." });
@@ -593,6 +595,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     pendingCallsRef.current.clear();
     resolveSaveNote(false);
     mutedRef.current = false;
+    textOnlyRef.current = false;
     setMuted(false);
     listeningRef.current = false;
     void engineRef.current?.shutdown();
@@ -617,20 +620,31 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const toggleMute = useCallback(async () => {
     if (!started || !engineRef.current) return;
     const next = !mutedRef.current;
-    mutedRef.current = next;
-    setMuted(next);
     if (next) {
+      mutedRef.current = true;
+      setMuted(true);
       engineRef.current.stopMicrophone();
       listeningRef.current = false;
       setStatus({ mode: "idle", text: "microphone muted" });
-    } else {
-      if (wsRef.current?.readyState === WebSocket.OPEN && agentReadyRef.current) {
-        await engineRef.current.startMicrophone();
-        listeningRef.current = true;
-        setStatus({ mode: "listening", text: "listening..." });
-      } else {
+      return;
+    }
+    try {
+      if (wsRef.current?.readyState !== WebSocket.OPEN || !agentReadyRef.current) {
         setStatus({ mode: "error", text: "Select Retry to reconnect" });
+        return;
       }
+      await engineRef.current.enableMicrophone();
+      await engineRef.current.startMicrophone();
+      textOnlyRef.current = false;
+      mutedRef.current = false;
+      setMuted(false);
+      listeningRef.current = true;
+      setStatus({ mode: "listening", text: "listening..." });
+    } catch (err) {
+      console.warn("microphone permission unavailable", err);
+      mutedRef.current = true;
+      setMuted(true);
+      setStatus({ mode: "idle", text: "microphone unavailable; use text" });
     }
   }, [started]);
 
