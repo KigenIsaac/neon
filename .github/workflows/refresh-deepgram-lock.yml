@@ -1,0 +1,29 @@
+name: Refresh Deepgram SDK lockfile (temporary)
+on:
+  push:
+    branches: [feat/production-hardening-and-agent-tools]
+    paths:
+      - ".github/workflows/refresh-deepgram-lock.yml"
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/production-hardening-and-agent-tools
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Recompute the exact npm lockfile from pinned dependencies
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit updated lock
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git diff --cached --quiet || git commit -m "build(audio): lock Deepgram official agent SDK and transitive deps"
+          git push origin HEAD:feat/production-hardening-and-agent-tools
