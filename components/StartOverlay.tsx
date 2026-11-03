@@ -35,6 +35,9 @@ export function StartOverlay({
           {onRetryAuth && <button type="button" onClick={onRetryAuth}>Retry sign-in</button>}
         </div>
       )}
+      <a className="privacy-link" href="/privacy" target="_blank" rel="noopener noreferrer">
+        How NEON handles your microphone and data
+      </a>
       {conversations.length > 0 && (
         <div className="recent-sessions">
           <h2>Continue a conversation</h2>
