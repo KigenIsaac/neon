@@ -23,8 +23,9 @@ test("calculator rejects unsafe input, malformed math and infinity", () => {
 test("read-only time tool returns parsable ISO time and a time zone", async () => {
   const raw = await runAgentTool("get_current_time", {}, { confirmSave: () => false });
   const result = JSON.parse(raw);
-  assert.ok(Number.isFinite(Date.parse(result.date_time)));
+  assert.ok(Number.isFinite(Date.parse(result.utc_date_time)));
   assert.equal(typeof result.user_time_zone, "string");
+  assert.equal(typeof result.local_date_time, "string");
 });
 
 test("side-effecting save tool explicitly asks and respects declines", async () => {
