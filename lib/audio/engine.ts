@@ -16,6 +16,7 @@ export class AudioEngine {
   private micSource: MediaStreamAudioSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
   private micRequest: Promise<void> | null = null;
+  private microphoneEpoch = 0;
 
   private playbackGeneration = 0;
   private playbackState: "idle" | "buffering" | "playing" | "drained" = "idle";
@@ -50,7 +51,8 @@ export class AudioEngine {
   async enableMicrophone() {
     if (this.mediaStream) return;
     if (this.micRequest) return this.micRequest;
-    this.micRequest = navigator.mediaDevices.getUserMedia({
+    const epoch = this.microphoneEpoch;
+    const promise = navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
         echoCancellation: true,
@@ -60,9 +62,17 @@ export class AudioEngine {
       video: false
     }).then((stream) => {
       // A late permission response must not resurrect a released microphone.
+      if (this.microphoneEpoch !== epoch ||
+          !this.audioCtx || this.audioCtx.state === "closed") {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       this.mediaStream = stream;
-    }).finally(() => { this.micRequest = null; });
-    return this.micRequest;
+    }).finally(() => {
+      if (this.micRequest === promise) this.micRequest = null;
+    });
+    this.micRequest = promise;
+    return promise;
   }
 
   async startMicrophone() {
@@ -100,6 +110,8 @@ export class AudioEngine {
   }
 
   stopMicrophone() {
+    this.microphoneEpoch++;
+    this.micRequest = null;
     if (this.micWorklet) {
       this.micWorklet.port.onmessage = null;
       try { this.micWorklet.disconnect(); } catch {}
