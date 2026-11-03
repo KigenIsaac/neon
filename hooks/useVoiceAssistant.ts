@@ -457,7 +457,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         void connectAgentRef.current?.();
       }, delay);
     };
-  }, [handleAgentMessage]);
+  }, [handleAgentMessage, resolveSaveNote]);
 
   useEffect(() => {
     connectAgentRef.current = connectAgent;
