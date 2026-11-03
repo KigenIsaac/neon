@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioEngine } from "@/lib/audio/engine";
 import { AGENT_CONFIG, buildSettings, type HistoryTurn } from "@/lib/agent/settings";
 import { inferScene } from "@/lib/visuals/heuristics";
+import { parseScene } from "@/lib/visuals/validation";
 import { runAgentTool } from "@/lib/agent/tools";
 import type { Scene, StatusMode } from "@/types";
 import type { Session } from "@supabase/supabase-js";
@@ -34,15 +35,6 @@ interface AgentMessage {
 
 interface VisualSceneArguments {
   scene?: unknown;
-}
-
-function isScene(value: unknown): value is Scene {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as { layout?: unknown; boxes?: unknown };
-  return (
-    typeof candidate.layout === "string" &&
-    Array.isArray(candidate.boxes)
-  );
 }
 
 export interface UseVoiceAssistantResult {
@@ -88,10 +80,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
 
   const sceneKey = useCallback((s: Scene) => {
-    const sig = (s.boxes || [])
-      .map((b) => `${b.kind}:${b.title ?? ""}:${b.value ?? ""}`)
-      .join("|");
-    return `${s.id ?? ""}#${s.layout}#${sig}`;
+    return JSON.stringify(s);
   }, []);
 
   const armHoldCap = useCallback(() => {
@@ -263,7 +252,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
               if (call.name === "visual_scene") {
                 const candidate = parsed && typeof parsed === "object" && "scene" in parsed
                   ? (parsed as VisualSceneArguments).scene : parsed;
-                const next = isScene(candidate) ? candidate : null;
+                const next = parseScene(candidate);
                 if (next && !controller.signal.aborted) {
                   sceneFromToolRef.current = true;
                   illustrate(next);
