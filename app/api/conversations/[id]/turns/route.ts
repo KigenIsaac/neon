@@ -25,7 +25,7 @@ export async function POST(
   const role = body?.role;
   const content = body?.content;
 
-  if (role !== "user" && role !== "assistant" && role !== "system") {
+  if (role !== "user" && role !== "assistant") {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 
