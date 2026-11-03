@@ -65,6 +65,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [greeting, setGreeting] = useState("");
   const [scene, setScene] = useState<Scene | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
 
   const engineRef = useRef<AudioEngine | null>(null);
   const [level, setLevel] = useState(0);
@@ -120,6 +121,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       sceneStateRef.current = "tail";
       sceneTimerRef.current = setTimeout(() => {
         sceneTimerRef.current = null;
+        sceneRef.current = null;
+        sceneRef.current = null;
         setScene(null);
         lastSceneKeyRef.current = null;
         sceneStateRef.current = "idle";
@@ -129,8 +132,9 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
   const illustrate = useCallback((next: Scene) => {
     const key = sceneKey(next);
-    if (key === lastSceneKeyRef.current && scene) return;
+    if (key === lastSceneKeyRef.current && sceneRef.current) return;
     lastSceneKeyRef.current = key;
+    sceneRef.current = next;
     setScene(next);
     if (sceneStateRef.current === "held") {
       armHoldCap();
@@ -144,13 +148,13 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         sceneStateRef.current = "idle";
       }, IDLE_MS);
     }
-  }, [scene, sceneKey, armHoldCap]);
+  }, [sceneKey, armHoldCap]);
 
   const holdScene = useCallback(() => {
-    if (!scene) return;
+    if (!sceneRef.current) return;
     sceneStateRef.current = "held";
     armHoldCap();
-  }, [scene, armHoldCap]);
+  }, [armHoldCap]);
 
   const releaseScene = useCallback(() => {
     if (sceneStateRef.current !== "held") return;
@@ -158,6 +162,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
     sceneTimerRef.current = setTimeout(() => {
       sceneTimerRef.current = null;
+      sceneRef.current = null;
       setScene(null);
       lastSceneKeyRef.current = null;
       sceneStateRef.current = "idle";
@@ -616,6 +621,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     wsRef.current = null;
     setStarted(false);
     setStatus({ mode: "idle", text: "idle" });
+    sceneRef.current = null;
     setScene(null);
   }, [resolveSaveNote]);
 
