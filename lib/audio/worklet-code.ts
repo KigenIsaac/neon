@@ -101,7 +101,7 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
   }
 
   appendPCM(buffer) {
-    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 2) return;
+    if (!buffer || typeof buffer.byteLength !== "number" || buffer.byteLength < 2) return;
     const usable = buffer.byteLength - (buffer.byteLength % 2);
     if (!usable) return;
     const pcm = new Int16Array(buffer, 0, usable / 2);
