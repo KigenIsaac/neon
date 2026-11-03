@@ -926,3 +926,68 @@ body::after {
 }
 .note-confirm-actions button.confirm-primary { background: #2d7895; border-color: #6fe2ff; }
 .note-confirm-actions button:focus-visible { outline: 2px solid #b2ebff; outline-offset: 2px; }
+
+.transcript-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(94vw, 660px);
+  max-height: 83dvh;
+  padding: 1.3rem;
+  overflow: auto;
+  background: #051225;
+  border: 1px solid rgba(95,208,255,.4);
+  border-radius: 18px;
+  color: #eaf7ff;
+  box-shadow: 0 25px 90px rgba(0,0,0,.8);
+  user-select: text;
+  touch-action: pan-y;
+}
+.transcript-dialog::backdrop { background: rgba(0,3,12,.84); backdrop-filter: blur(7px); }
+.transcript-dialog header, .transcript-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .7rem;
+}
+.transcript-dialog h2 { font-size: 1.2rem; font-weight: 650; }
+.transcript-dialog button {
+  background: rgba(35,85,140,.65);
+  border: 1px solid rgba(115,194,255,.35);
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+  padding: .5rem 1rem;
+  min-height: 40px;
+  touch-action: manipulation;
+  font: inherit;
+  font-size: .85rem;
+}
+.transcript-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+.transcript-dialog button:focus-visible { outline: 2px solid #9ceeff; outline-offset: 2px; }
+.transcript-tip, .transcript-empty {
+  margin: .8rem 0;
+  font-size: .8rem;
+  color: #aac6e0;
+  line-height: 1.5;
+}
+.transcript-history { list-style: none; display: grid; gap: .7rem; margin: 1rem 0; }
+.transcript-history li {
+  border-radius: 12px;
+  background: rgba(70,125,178,.15);
+  border: 1px solid rgba(95,208,255,.18);
+  padding: .8rem;
+}
+.transcript-history li.user { border-color: rgba(255,140,95,.35); }
+.transcript-history li span {
+  display: block;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: #71d9ff;
+  margin-bottom: .25rem;
+}
+.transcript-history li.user span { color: #ffa07d; }
+.transcript-history li p { line-height: 1.5; overflow-wrap: anywhere; }
+.transcript-dialog footer span { font-size: .8rem; color: #a7d5e8; }
