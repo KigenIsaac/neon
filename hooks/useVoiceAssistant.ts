@@ -229,12 +229,12 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         if (!content) return;
         if (data.role === "user") {
           setTranscript(content);
-          setMessages((previous) => [...previous, { role: "user", content }].slice(-100));
+          setMessages((previous) => [...previous, { role: "user" as const, content }].slice(-100));
           setStatus({ mode: "thinking", text: "thinking..." });
           persistTurn("user", content);
         } else if (data.role === "assistant") {
           setTranscript(content);
-          setMessages((previous) => [...previous, { role: "assistant", content }].slice(-100));
+          setMessages((previous) => [...previous, { role: "assistant" as const, content }].slice(-100));
           setStatus({ mode: "speaking", text: "speaking..." });
           persistTurn("assistant", content);
           if (!sceneFromToolRef.current) {
