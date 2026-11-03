@@ -15,6 +15,7 @@ export class AudioEngine {
   private micWorklet: AudioWorkletNode | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
+  private micRequest: Promise<void> | null = null;
 
   private playbackGeneration = 0;
   private playbackState: "idle" | "buffering" | "playing" | "drained" = "idle";
@@ -48,7 +49,8 @@ export class AudioEngine {
 
   async enableMicrophone() {
     if (this.mediaStream) return;
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+    if (this.micRequest) return this.micRequest;
+    this.micRequest = navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
         echoCancellation: true,
@@ -56,10 +58,16 @@ export class AudioEngine {
         autoGainControl: true
       },
       video: false
-    });
+    }).then((stream) => {
+      // A late permission response must not resurrect a released microphone.
+      this.mediaStream = stream;
+    }).finally(() => { this.micRequest = null; });
+    return this.micRequest;
   }
 
   async startMicrophone() {
+    if (!this.audioCtx || this.micWorklet) return;
+    if (!this.mediaStream) await this.enableMicrophone();
     if (!this.audioCtx || !this.mediaStream || this.micWorklet) return;
     this.micSource = this.audioCtx.createMediaStreamSource(this.mediaStream);
     this.micWorklet = new AudioWorkletNode(this.audioCtx, "microphone-processor", {
@@ -100,6 +108,14 @@ export class AudioEngine {
     if (this.micSource) {
       try { this.micSource.disconnect(); } catch {}
       this.micSource = null;
+    }
+    // Disconnecting an AudioWorklet alone does not turn off the user's
+    // hardware microphone. Stop media tracks as well, including on mute.
+    if (this.mediaStream) {
+      for (const track of this.mediaStream.getTracks()) {
+        try { track.stop(); } catch {}
+      }
+      this.mediaStream = null;
     }
   }
 
