@@ -1001,3 +1001,19 @@ body::after {
   border-radius: 999px;
   padding: .25rem .7rem;
 }
+
+#start-overlay .start-text-button {
+  border: none;
+  padding: .3rem .8rem;
+  background: transparent;
+  color: #b7daf1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font: inherit;
+  font-size: .85rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#start-overlay .start-text-button:hover { color: #fff; }
+#start-overlay .start-text-button:focus-visible { outline: 2px solid #8ce3ff; outline-offset: 3px; }
+#start-overlay .start-text-button:disabled { opacity: .5; cursor: not-allowed; }
