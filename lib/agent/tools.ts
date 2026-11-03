@@ -114,6 +114,18 @@ export async function runAgentTool(
       const data = await readResponse(res);
       return JSON.stringify({ notes: data.notes ?? [] });
     }
+    case "search_history": {
+      if (typeof args.query !== "string") throw new Error("History search requires text");
+      const query = args.query.trim();
+      if (query.length < 2 || query.length > 120) {
+        throw new Error("Search text must be between 2 and 120 characters");
+      }
+      const res = await fetch("/api/history/search?q=" + encodeURIComponent(query), {
+        cache: "no-store", signal: options.signal
+      });
+      const data = await readResponse(res);
+      return JSON.stringify({ matches: data.matches ?? [] });
+    }
     case "save_note": {
       const note = typeof args.content === "string" ? args.content.trim() : "";
       if (!note || note.length > 600) throw new Error("Note must be between 1 and 600 characters");
