@@ -21,7 +21,7 @@ export class AudioEngine {
 
   constructor(private cb: AudioEngineCallbacks = {}) {}
 
-  async initialize() {
+  async initialize({ microphone = true }: { microphone?: boolean } = {}) {
     if (!this.audioCtx || this.audioCtx.state === "closed") {
       this.audioCtx = new AudioContext({ latencyHint: "interactive" });
     }
@@ -43,17 +43,20 @@ export class AudioEngine {
       this.playbackWorklet.connect(this.audioCtx.destination);
     }
 
-    if (!this.mediaStream) {
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        },
-        video: false
-      });
-    }
+    if (microphone) await this.enableMicrophone();
+  }
+
+  async enableMicrophone() {
+    if (this.mediaStream) return;
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
+      video: false
+    });
   }
 
   async startMicrophone() {
