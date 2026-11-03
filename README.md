@@ -537,12 +537,18 @@ the action succeeded.
 
 ### Voice and interaction
 
-- Use **Wake the orb** to start a new voice session.
+- Use **Wake the orb** to start a new voice session, or **Start with keyboard**
+  for a text-only session without requesting microphone permission.
 - Resume one of your recent conversations from the start screen.
 - Use **Mute mic**, **End session**, or **Retry connection** to manage audio.
+  Muting releases the browser's active microphone tracks; enabling it again
+  may require user permission.
 - Use the text field to send a message if speaking is inconvenient.
+- Use **Transcript** to review and copy the visible conversation history.
 - Use **Saved notes** to review and delete notes.
 - When you ask NEON to remember a note, approve the actual contents on screen.
+- Idle WebSocket sessions send authenticated Deepgram keepalives after the
+  settings handshake to avoid unexpected timeouts while typing or muted.
 - Previous conversation turns are loaded on resume and reconnect. They are
   transmitted to the configured voice AI provider for context.
 - The UI respects reduced-motion preferences and adjusts visual layouts on resize.
@@ -612,6 +618,7 @@ microphone testing or browser-based end-to-end verification.
 - Test note read/write/delete and conversation resumption with **two separate**
   users to verify isolation.
 - Check Deepgram billing alerts, provider quotas and server error logs.
+- Confirm the UI shows actual provider-reported per-turn latency when available.
 - Record mobile CPU utilization, dropped audio frames and end-to-end response
   latency under realistic network conditions.
 - Confirm reduced-motion appearance and keyboard-only navigation.
