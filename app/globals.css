@@ -712,3 +712,87 @@ body::after {
   }
   .voice-actions button { font-size: .78rem; padding: .45rem .75rem; }
 }
+
+#start-overlay {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  cursor: default;
+  gap: 1rem;
+}
+#start-overlay .wake-button {
+  border: 1px solid rgba(80, 180, 255, .4);
+  background: rgba(12, 35, 65, .8);
+  color: #eaf7ff;
+  padding: .9rem 1.6rem;
+  border-radius: 999px;
+  font: inherit;
+  font-size: clamp(.94rem, 2vw, 1.08rem);
+  letter-spacing: .06em;
+  cursor: pointer;
+  min-height: 50px;
+  touch-action: manipulation;
+}
+#start-overlay .wake-button:hover { background: rgba(23, 70, 110, .85); }
+#start-overlay .wake-button:focus-visible,
+.recent-sessions button:focus-visible {
+  outline: 2px solid #8ce3ff;
+  outline-offset: 3px;
+}
+#start-overlay .wake-button:disabled { opacity: .55; cursor: wait; }
+.recent-sessions {
+  width: min(92vw, 470px);
+  max-height: min(40vh, 340px);
+  overflow-y: auto;
+  border: 1px solid rgba(95,208,255,.23);
+  background: rgba(3,12,28,.87);
+  padding: 1rem;
+  border-radius: 16px;
+  text-align: left;
+  user-select: text;
+  touch-action: pan-y;
+}
+.recent-sessions h2 {
+  font-weight: 550;
+  color: #b6dfff;
+  letter-spacing: .07em;
+  font-size: .88rem;
+  margin-bottom: .7rem;
+}
+.recent-sessions ul { list-style: none; display: grid; gap: .35rem; }
+.recent-sessions li { display: flex; align-items: center; gap: .5rem; }
+.recent-sessions button {
+  cursor: pointer;
+  font: inherit;
+  color: #dbeeff;
+  border: 1px solid transparent;
+  background: rgba(60,115,175,.12);
+  min-height: 38px;
+  border-radius: 9px;
+  touch-action: manipulation;
+}
+.recent-sessions .resume-session {
+  display: flex; flex: 1 1 auto; min-width: 0;
+  justify-content: space-between; align-items: center; gap: .5rem;
+  text-align: left; padding: .5rem .65rem;
+}
+.recent-sessions .resume-session span {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.recent-sessions .resume-session time {
+  flex: 0 0 auto; font-size: .72rem; color: #9ab5d0;
+}
+.recent-sessions .delete-session {
+  padding: .45rem .7rem; color: #ffa9b9;
+}
+.recent-sessions button:hover { border-color: rgba(100,194,255,.5); }
+#start-overlay .history-notice {
+  animation: none;
+  background: transparent; border: 0; padding: 0;
+  letter-spacing: normal;
+  font-size: .72rem; line-height: 1.4;
+  margin-top: .8rem;
+  color: #a5c6df;
+}
+@media (max-height: 540px) {
+  #start-overlay { justify-content: flex-start; }
+}
