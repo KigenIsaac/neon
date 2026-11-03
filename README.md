@@ -377,7 +377,7 @@ npm run typecheck
 npm run build
 ```
 
-CI additionally runs a production dependency audit with `npm audit --omit=dev --audit-level=high`.
+CI additionally runs automated Node tests (`npm test`) and a production dependency audit with `npm audit --omit=dev --audit-level=high`.
 
 ---
 
@@ -508,3 +508,118 @@ CI runs linting, TypeScript checking, a production dependency audit, and a produ
 The architecture is intentionally designed to explore the intersection of:
 
 **AI × Voice × WebSockets × Audio × Persistent State × Interactive UI**
+
+---
+
+## 🛡️ November 2026 Security and Reliability Upgrade
+
+This branch adds **safe client-side agent tools**, stronger connection recovery,
+history resumption, user-controlled note persistence, and database-enforced
+Deepgram token issuance limits. The graphics and voice-first interaction remain
+the core user experience.
+
+### Tools
+
+The Deepgram agent can call these explicitly allowlisted tools:
+
+| Tool | Capability | Confirmation |
+|---|---|---|
+| `calculate` | Parse and evaluate arithmetic safely, without `eval` | No |
+| `get_current_time` | Read the browser's current time and time zone | No |
+| `find_notes` | Search the authenticated user's saved notes | No |
+| `save_note` | Store a user-requested private note | **Yes, browser confirmation required** |
+| `visual_scene` | Render a bounded, validated visual explanation | No |
+
+The assistant **cannot** send email, browse the web, run shell commands,
+modify files or execute arbitrary URLs without separate, explicitly reviewed
+integrations. An unsupported tool call returns an error instead of pretending
+the action succeeded.
+
+### Voice and interaction
+
+- Use **Wake the orb** to start a new voice session.
+- Resume one of your recent conversations from the start screen.
+- Use **Mute mic**, **End session**, or **Retry connection** to manage audio.
+- Use the text field to send a message if speaking is inconvenient.
+- Use **Saved notes** to review and delete notes.
+- When you ask NEON to remember a note, approve the actual contents on screen.
+- Previous conversation turns are loaded on resume and reconnect. They are
+  transmitted to the configured voice AI provider for context.
+- The UI respects reduced-motion preferences and adjusts visual layouts on resize.
+
+### Database migrations (REQUIRED BEFORE DEPLOYMENT)
+
+Apply migrations **in order**, using your linked Supabase project and the
+Supabase CLI (or review/run the SQL through the Supabase SQL editor):
+
+```bash
+supabase login
+supabase link --project-ref YOUR_SUPABASE_PROJECT_REF
+supabase db push
+```
+
+You can inspect the SQL in `supabase/migrations/` before applying it:
+
+1. `0001_init.sql` — initial profiles, conversations, turns and scenes (existing).
+2. `0002_voice_token_quotas.sql` — atomic token issuance budgets.
+3. `0003_private_notes.sql` — private notes with user-scoped RLS.
+4. `0004_scene_integrity.sql` — scene/turn referential integrity.
+
+**The Deepgram token endpoint fails closed** (HTTP 503) if
+`claim_voice_token_budget` is not installed. Deploying the new code **before**
+running migration 0002 will prevent new voice sessions from starting.
+
+Token issuance is capped at **12 requests per user per hour** and **240 total
+requests per hour** by default. These are *issuance* limits, not a cost guarantee:
+set a separate **Deepgram budget and spending alert**, and monitor provider
+usage. Anonymous registration does not replace abuse detection or provider-level
+spending controls. Avoid exposing a publicly billed demo without those controls.
+
+### Privacy and retention
+
+- Conversation turns and generated scenes are stored in Supabase with RLS.
+- Notes and conversation history are scoped to the signed-in Supabase user.
+- A user can delete their saved conversations and notes in the interface.
+- An anonymous session is **not a durable account** across browser storage
+  clearing or device changes. For cross-device persistence, configure a
+  permanent sign-in flow before offering it as a user-facing guarantee.
+- Do not place API keys, passwords or payment details in notes.
+- Establish a documented retention policy before handling real customer data.
+
+### Engineering verification
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm audit --omit=dev --audit-level=high
+npm run build
+```
+
+Tests exercise arithmetic tools, opt-in notes, structured scene validation,
+microphone resampling and playback/drain behavior. They do not replace live
+microphone testing or browser-based end-to-end verification.
+
+#### Recommended release checks
+
+- Verify anonymous sign-in and the quota RPC work with the **actual**
+  production Supabase configuration.
+- Test start, mute, unmute, typed input, interruption, reconnect, end and
+  restart in Chrome, Firefox, Safari and Android/iOS browsers.
+- Test deliberately revoked microphone permission, offline transitions and
+  token-rate-limit responses.
+- Test note read/write/delete and conversation resumption with **two separate**
+  users to verify isolation.
+- Check Deepgram billing alerts, provider quotas and server error logs.
+- Record mobile CPU utilization, dropped audio frames and end-to-end response
+  latency under realistic network conditions.
+- Confirm reduced-motion appearance and keyboard-only navigation.
+
+### Known boundaries
+
+NEON is still an experimental agent, not a verified 100% production-grade
+autonomous system. It does not currently have full browser e2e coverage, a
+dedicated observability service, multi-region failover, independent provider
+fallback or human-reviewed integrations with high-risk external services.
+Those should be built and measured before production-level guarantees.
