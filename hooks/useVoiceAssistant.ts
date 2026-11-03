@@ -220,9 +220,20 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
           handshakeTimeoutRef.current = null;
         }
         if (!mutedRef.current) {
-          void engineRef.current?.startMicrophone();
-          listeningRef.current = true;
-          setStatus({ mode: "listening", text: "listening..." });
+          const engine = engineRef.current;
+          if (engine) void engine.startMicrophone()
+            .then(() => {
+              if (mutedRef.current || shuttingDownRef.current || !agentReadyRef.current) return;
+              listeningRef.current = true;
+              setStatus({ mode: "listening", text: "listening..." });
+            })
+            .catch((error) => {
+              console.warn("Microphone could not be restarted", error);
+              mutedRef.current = true;
+              setMuted(true);
+              listeningRef.current = false;
+              setStatus({ mode: "idle", text: "microphone unavailable; use text" });
+            });
         } else {
           setStatus({ mode: "idle", text: textOnlyRef.current ? "text mode" : "microphone muted" });
         }
