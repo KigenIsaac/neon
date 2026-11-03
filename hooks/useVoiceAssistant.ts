@@ -45,6 +45,8 @@ export interface UseVoiceAssistantResult {
   scene: Scene | null;
   level: number;
   muted: boolean;
+  pendingSaveNote: string | null;
+  resolveSaveNote: (approved: boolean) => void;
   start: (conversationId?: string) => Promise<void>;
   shutdown: () => void;
   retry: () => Promise<void>;
@@ -62,6 +64,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const engineRef = useRef<AudioEngine | null>(null);
   const [level, setLevel] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [pendingSaveNote, setPendingSaveNote] = useState<string | null>(null);
+  const saveDecisionRef = useRef<((approved: boolean) => void) | null>(null);
   const mutedRef = useRef(false);
   const pendingCallsRef = useRef(new Map<string, AbortController>());
   const wsRef = useRef<WebSocket | null>(null);
@@ -80,6 +84,20 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
   const connectInFlightRef = useRef(false);
   const handshakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resolveSaveNote = useCallback((approved: boolean) => {
+    const decision = saveDecisionRef.current;
+    saveDecisionRef.current = null;
+    setPendingSaveNote(null);
+    decision?.(approved);
+  }, []);
+
+  const askSaveNote = useCallback((note: string): Promise<boolean> =>
+    new Promise<boolean>((resolve) => {
+      if (saveDecisionRef.current) saveDecisionRef.current(false);
+      saveDecisionRef.current = resolve;
+      setPendingSaveNote(note);
+    }), []);
 
   const sceneKey = useCallback((s: Scene) => {
     return JSON.stringify(s);
@@ -240,6 +258,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
           if (task) {
             task.abort();
             pendingCallsRef.current.delete(call.id);
+            if (call.name === "save_note") resolveSaveNote(false);
           }
         }
         break;
@@ -268,9 +287,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
               } else {
                 response = await runAgentTool(call.name, parsed, {
                   signal: controller.signal,
-                  confirmSave: (note) => window.confirm(
-                    "Save this private note to NEON?\\n\\n" + note
-                  )
+                  confirmSave: askSaveNote
                 });
               }
             } catch (err) {
@@ -301,7 +318,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         break;
       }
     }
-  }, [illustrate, persistScene, persistTurn, respondToFunction]);
+  }, [illustrate, persistScene, persistTurn, respondToFunction, askSaveNote, resolveSaveNote]);
 
   const connectAgent = useCallback(async () => {
     if (shuttingDownRef.current || connectInFlightRef.current) return;
@@ -420,6 +437,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       }
       for (const controller of pendingCallsRef.current.values()) controller.abort();
       pendingCallsRef.current.clear();
+      resolveSaveNote(false);
       listeningRef.current = false;
       engineRef.current?.stopMicrophone();
       engineRef.current?.stopPlayback();
@@ -532,6 +550,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
     for (const controller of pendingCallsRef.current.values()) controller.abort();
     pendingCallsRef.current.clear();
+    resolveSaveNote(false);
     mutedRef.current = false;
     setMuted(false);
     listeningRef.current = false;
@@ -542,7 +561,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     setStarted(false);
     setStatus({ mode: "idle", text: "idle" });
     setScene(null);
-  }, []);
+  }, [resolveSaveNote]);
 
   const retry = useCallback(async () => {
     if (!started) {
@@ -598,5 +617,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, greeting, scene, level, muted, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
