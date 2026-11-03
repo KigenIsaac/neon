@@ -1068,3 +1068,42 @@ body::after {
   font-size: .86rem;
   color: #a4bed2;
 }
+
+/* Local real-time audio diagnostics — lightweight and readable on laptops and phones. */
+.audio-health-panel {
+  width: min(94vw, 570px);
+  max-height: min(38dvh, 300px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: .7rem auto;
+  padding: .75rem .9rem;
+  border: 1px solid rgba(113, 196, 255, .35);
+  border-radius: 14px;
+  background: rgba(6, 24, 48, .94);
+  color: #ecf8ff;
+  text-align: left;
+  font-size: .79rem;
+  line-height: 1.45;
+  user-select: text;
+  touch-action: pan-y;
+}
+.audio-health-heading { display: flex; align-items: center; justify-content: space-between; gap: .7rem; }
+.audio-health-heading h2 { font-size: .94rem; font-weight: 650; }
+.audio-health-heading button {
+  font: inherit;
+  padding: .35rem .7rem;
+  color: #e2f7ff;
+  border: 1px solid rgba(140, 206, 255, .4);
+  border-radius: 8px;
+  background: rgba(39, 85, 131, .6);
+  cursor: pointer;
+}
+.audio-health-panel dl { display: grid; gap: .25rem; margin: .55rem 0; }
+.audio-health-panel dl > div {
+  display: flex; align-items: start; justify-content: space-between; gap: 1rem;
+}
+.audio-health-panel dt { color: #b4d2e9; }
+.audio-health-panel dd { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
+.audio-health-advice { margin: .55rem 0; color: #d9e8f7; }
+.audio-health-privacy { margin-top: .5rem; font-size: .72rem; color: #9db6ca; }
+.audio-health-heading button:focus-visible { outline: 2px solid #aff1ff; outline-offset: 2px; }
