@@ -1029,3 +1029,42 @@ body::after {
   border-radius: 10px;
   background: rgba(88,48,16,.55);
 }
+
+#start-overlay .privacy-link {
+  color: #8caec7;
+  font-size: .75rem;
+  line-height: 1.35;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  touch-action: manipulation;
+}
+#start-overlay .privacy-link:hover { color: #d9f1ff; }
+#start-overlay .privacy-link:focus-visible { outline: 2px solid #8ce3ff; outline-offset: 3px; }
+
+.privacy-page {
+  position: relative;
+  z-index: 10;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow-y: auto;
+  touch-action: pan-y;
+  user-select: text;
+  margin: 0 auto;
+  width: min(100%, 820px);
+  padding: clamp(1.5rem, 5vw, 3rem);
+  background: #041021;
+  color: #e3f4ff;
+  line-height: 1.72;
+}
+.privacy-page h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); margin: 1rem 0; }
+.privacy-page h2 { font-size: 1.1rem; margin: 1.8rem 0 .5rem; color: #8ce3ff; }
+.privacy-page p { font-size: .96rem; margin-bottom: .9rem; color: #bdd6e9; }
+.privacy-page .privacy-lead { font-size: 1.1rem; color: #e2f4ff; }
+.privacy-page .privacy-back { color: #b4ddf5; text-decoration: underline; }
+.privacy-page .privacy-footnote {
+  margin-top: 2rem;
+  border-top: 1px solid rgba(140,227,255,.2);
+  padding-top: 1rem;
+  font-size: .86rem;
+  color: #a4bed2;
+}
