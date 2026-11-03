@@ -39,7 +39,7 @@ function renderBoxContent(b: SceneBox) {
     return <div className="ill-chip">{b.title || b.body || "Concept"}</div>;
   }
   if (kind === "chart") {
-    const vals = (b.values || []).map(Number).filter(Number.isFinite).slice(0, 12);
+    const vals = (b.values || []).map((v) => Math.max(0, Number(v))).filter(Number.isFinite).slice(0, 12);
     const max = Math.max(1, ...vals);
     return (
       <>
@@ -87,6 +87,7 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
 
   useLayoutEffect(() => {
     if (!scene || !stageRef.current) return;
+    const updateLayout = () => {
     const nodes = boxRefs.current.filter(Boolean) as HTMLElement[];
     if (nodes.length !== scene.boxes.length) return;
 
@@ -109,6 +110,10 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
         n.classList.add("show");
       });
     });
+    };
+    updateLayout();
+    window.addEventListener("resize", updateLayout, { passive: true });
+    return () => window.removeEventListener("resize", updateLayout);
   }, [scene]);
 
   useEffect(() => {
@@ -117,10 +122,10 @@ export function SceneStage({ scene }: { scene: Scene | null }) {
     };
   }, [scene]);
 
-  if (!scene) return <div id="stage" ref={stageRef} aria-live="polite" />;
+  if (!scene) return <div id="stage" ref={stageRef} aria-live="off" />;
 
   return (
-    <div id="stage" ref={stageRef} aria-live="polite">
+    <div id="stage" ref={stageRef} role="region" aria-label="AI visual explanation" aria-live="off">
       {scene.boxes.map((b, i) => (
         <section
           key={`${i}-${b.title ?? ""}-${b.value ?? ""}`}
