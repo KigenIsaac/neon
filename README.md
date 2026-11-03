@@ -527,6 +527,7 @@ The Deepgram agent can call these explicitly allowlisted tools:
 | `calculate` | Parse and evaluate arithmetic safely, without `eval` | No |
 | `get_current_time` | Read the browser's current time and time zone | No |
 | `find_notes` | Search the authenticated user's saved notes | No |
+| `search_history` | Search private conversation transcripts by phrase | No |
 | `save_note` | Store a user-requested private note | **Yes, browser confirmation required** |
 | `visual_scene` | Render a bounded, validated visual explanation | No |
 
@@ -604,7 +605,7 @@ npm run build
 ```
 
 Tests exercise arithmetic tools, opt-in notes, structured scene validation,
-microphone resampling and playback/drain behavior. They do not replace live
+microphone resampling and playback/drain behavior, plus safe history search. They do not replace live
 microphone testing or browser-based end-to-end verification.
 
 #### Recommended release checks
