@@ -95,7 +95,12 @@ export async function runAgentTool(
     }
     case "get_current_time": {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      return JSON.stringify({ date_time: new Date().toISOString(), user_time_zone: zone });
+      const now = new Date();
+      return JSON.stringify({
+        utc_date_time: now.toISOString(),
+        local_date_time: now.toLocaleString(undefined, { dateStyle: "full", timeStyle: "long" }),
+        user_time_zone: zone
+      });
     }
     case "find_notes": {
       if (args.query !== undefined && typeof args.query !== "string") {
