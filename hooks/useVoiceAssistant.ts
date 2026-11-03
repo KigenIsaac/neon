@@ -47,6 +47,9 @@ export interface UseVoiceAssistantResult {
   lastLatencyMs: number | null;
   audioDiagnostics: PlaybackDiagnostics | null;
   microphoneDevice: string | null;
+  audioInputDevices: Array<{ deviceId: string; label: string }>;
+  selectedMicId: string;
+  selectMicrophone: (deviceId: string) => Promise<void>;
   speechInterruptions: number;
   storageWarning: boolean;
   greeting: string;
@@ -70,6 +73,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [audioDiagnostics, setAudioDiagnostics] = useState<PlaybackDiagnostics | null>(null);
   const [microphoneDevice, setMicrophoneDevice] = useState<string | null>(null);
+  const [audioInputDevices, setAudioInputDevices] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
   const [speechInterruptions, setSpeechInterruptions] = useState(0);
   const agentPlaybackActiveRef = useRef(false);
   const [storageWarning, setStorageWarning] = useState(false);
@@ -552,6 +557,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     setLastLatencyMs(null);
     setAudioDiagnostics(null);
     setMicrophoneDevice(null);
+    setAudioInputDevices([]);
+    setSelectedMicId("");
     setSpeechInterruptions(0);
     agentPlaybackActiveRef.current = false;
     setStorageWarning(false);
@@ -604,7 +611,16 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         else releaseScene();
       },
       onPlaybackDiagnostics: (data) => setAudioDiagnostics(data),
-      onMicrophoneDevice: (label) => setMicrophoneDevice(label),
+      onMicrophoneDevice: (label) => {
+        setMicrophoneDevice(label);
+        if (label && navigator.mediaDevices?.enumerateDevices) {
+          void navigator.mediaDevices.enumerateDevices()
+            .then((devices) => setAudioInputDevices(devices
+              .filter((device) => device.kind === "audioinput" && !!device.deviceId)
+              .map((device) => ({ deviceId: device.deviceId, label: device.label || "Microphone" }))))
+            .catch(() => {});
+        }
+      },
       onDrained: () => {
         if (listeningRef.current) {
           setStatus({ mode: "listening", text: "listening..." });
@@ -710,6 +726,26 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     }
   }, [started]);
 
+  const selectMicrophone = useCallback(async (deviceId: string) => {
+    const engine = engineRef.current;
+    if (!started || !engine) return;
+    try {
+      await engine.switchMicrophone(deviceId || null);
+      setSelectedMicId(deviceId);
+      mutedRef.current = false;
+      textOnlyRef.current = false;
+      setMuted(false);
+      listeningRef.current = true;
+      setStatus({ mode: "listening", text: "listening..." });
+    } catch (error) {
+      console.warn("Unable to select microphone", error);
+      mutedRef.current = true;
+      setMuted(true);
+      listeningRef.current = false;
+      setStatus({ mode: "error", text: "Unable to use selected microphone. Try another input." });
+    }
+  }, [started]);
+
   const sendText = useCallback((raw: string) => {
     const content = raw.trim();
     const ws = wsRef.current;
@@ -734,5 +770,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, messages, lastLatencyMs, audioDiagnostics, microphoneDevice, speechInterruptions, storageWarning, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, messages, lastLatencyMs, audioDiagnostics, microphoneDevice, audioInputDevices, selectedMicId, selectMicrophone, speechInterruptions, storageWarning, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
