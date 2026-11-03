@@ -8,11 +8,13 @@ import { StatusBar } from "./StatusBar";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { SceneStage } from "./SceneStage";
 import { NotesPanel } from "./NotesPanel";
+import { SaveNoteDialog } from "./SaveNoteDialog";
 
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
     started, status, transcript, greeting, scene, level, muted,
+    pendingSaveNote, resolveSaveNote,
     start, shutdown, retry, toggleMute, sendText
   } = useVoiceAssistant(session);
   const [message, setMessage] = useState("");
@@ -63,6 +65,7 @@ export function VoiceConsole() {
       />
       <SceneStage scene={scene} />
       {started && showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
+      {pendingSaveNote !== null && <SaveNoteDialog note={pendingSaveNote} onDecision={resolveSaveNote} />}
       <main className="ui-overlay">
         <div id="greeting" className={greeting ? "show" : ""}>{greeting}</div>
         <div className="status-container">
