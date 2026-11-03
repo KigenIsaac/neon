@@ -58,7 +58,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
         <h2 id="notes-title">Saved notes</h2>
         <button type="button" onClick={onClose}>Close</button>
       </div>
-      <p className="notes-subtitle">Private to this sign-in session. Ask NEON to remember a note, then confirm it on screen.</p>
+      <p className="notes-subtitle">Private to your NEON account. Ask NEON to remember a note, then confirm it on screen.</p>
       {loading && <p>Loading your notes...</p>}
       {error && <p role="alert" className="input-error">{error}</p>}
       {!loading && !error && notes.length === 0 && <p>No notes saved yet.</p>}
