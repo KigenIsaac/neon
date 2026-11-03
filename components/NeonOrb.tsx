@@ -22,6 +22,7 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
     let W = 0, H = 0, DPR = 1, cx = 0, cy = 0, R = 0;
     let bgGrad: CanvasGradient, glowGrad: CanvasGradient, glassGrad: CanvasGradient;
     let lastPaletteType = "";
+    let shadeCache: Array<{ c: string; w: number }> = [];
     let raf: number | null = null;
     let last = 0, animTime = 0, angleY = 0;
     let mx = 0, my = 0, tmx = 0, tmy = 0;
@@ -151,6 +152,14 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
       glassGrad.addColorStop(0.42, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.045)`);
       glassGrad.addColorStop(0.82, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0.012)`);
       glassGrad.addColorStop(1, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
+      shadeCache = Array.from({ length: 16 }, (_, i) => {
+        const t = i / 15;
+        const a = 0.08 + 0.68 * t * t;
+        const r = Math.round(lerp(pal.dark.r, pal.primary.r, t));
+        const g = Math.round(lerp(pal.dark.g, pal.primary.g, t));
+        const b = Math.round(lerp(pal.dark.b, pal.primary.b, t));
+        return { c: `rgba(${r},${g},${b},${a.toFixed(3)})`, w: 0.5 + 1.7 * t };
+      });
       lastPaletteType = typeRef.current;
     };
 
@@ -298,18 +307,9 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
       edgeList.sort((p, q) => p.z - q.z);
 
       ctx.lineCap = "round";
-      // Precompute the palette once per frame, not once per edge.
-      const pal = paletteFrom(typeRef.current);
-      const SHADES = Array.from({ length: 16 }, (_, i) => {
-        const t = i / 15;
-        const a = 0.08 + 0.68 * t * t;
-        const r = Math.round(lerp(pal.dark.r, pal.primary.r, t));
-        const g = Math.round(lerp(pal.dark.g, pal.primary.g, t));
-        const b = Math.round(lerp(pal.dark.b, pal.primary.b, t));
-        return { c: `rgba(${r},${g},${b},${a.toFixed(3)})`, w: 0.5 + 1.7 * t };
-      });
+      // Palette is rebuilt only when the user/assistant voice state changes.
       for (const e of edgeList) {
-        const sh = SHADES[(((e.z + 1) * 0.5 * 15) | 0)];
+        const sh = shadeCache[(((e.z + 1) * 0.5 * 15) | 0)];
         ctx.strokeStyle = sh.c; ctx.lineWidth = sh.w;
         ctx.beginPath();
         ctx.moveTo(PX[e.a], PY[e.a]); ctx.lineTo(PX[e.b], PY[e.b]);
