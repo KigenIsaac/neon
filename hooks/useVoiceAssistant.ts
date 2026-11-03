@@ -41,6 +41,7 @@ export interface UseVoiceAssistantResult {
   started: boolean;
   status: { mode: StatusMode; text: string };
   transcript: string;
+  messages: HistoryTurn[];
   greeting: string;
   scene: Scene | null;
   level: number;
@@ -58,6 +59,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [started, setStarted] = useState(false);
   const [status, setStatus] = useState<{ mode: StatusMode; text: string }>({ mode: "idle", text: "idle" });
   const [transcript, setTranscript] = useState("");
+  const [messages, setMessages] = useState<HistoryTurn[]>([]);
   const [greeting, setGreeting] = useState("");
   const [scene, setScene] = useState<Scene | null>(null);
 
@@ -227,10 +229,12 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         if (!content) return;
         if (data.role === "user") {
           setTranscript(content);
+          setMessages((previous) => [...previous, { role: "user", content }].slice(-100));
           setStatus({ mode: "thinking", text: "thinking..." });
           persistTurn("user", content);
         } else if (data.role === "assistant") {
           setTranscript(content);
+          setMessages((previous) => [...previous, { role: "assistant", content }].slice(-100));
           setStatus({ mode: "speaking", text: "speaking..." });
           persistTurn("assistant", content);
           if (!sceneFromToolRef.current) {
@@ -346,6 +350,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
               typeof turn.content === "string"
             )
             .slice(-24);
+          setMessages(recentHistoryRef.current);
         }
       } catch (error) {
         console.warn("conversation context unavailable", error);
@@ -479,6 +484,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     reconnectAttemptsRef.current = 0;
     conversationIdRef.current = null;
     recentHistoryRef.current = [];
+    setMessages([]);
     try {
       if (existingConversationId) {
         const res = await fetch(`/api/conversations/${encodeURIComponent(existingConversationId)}`, {
@@ -617,5 +623,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, messages, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
