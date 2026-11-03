@@ -89,6 +89,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
   const connectInFlightRef = useRef(false);
   const handshakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const agentReadyRef = useRef(false);
 
   const resolveSaveNote = useCallback((approved: boolean) => {
     const decision = saveDecisionRef.current;
@@ -210,6 +212,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         break;
       }
       case "SettingsApplied":
+        agentReadyRef.current = true;
+        reconnectAttemptsRef.current = 0;
         if (handshakeTimeoutRef.current) {
           clearTimeout(handshakeTimeoutRef.current);
           handshakeTimeoutRef.current = null;
@@ -345,6 +349,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     connectInFlightRef.current = true;
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
+    agentReadyRef.current = false;
 
     // Use authenticated, user-scoped saved turns to survive a socket reconnect.
     // Only user/assistant text becomes conversational context, never system prompts.
@@ -410,9 +415,18 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     wsRef.current = ws;
     connectInFlightRef.current = false;
 
+    // A muted/text-only session sends no audio; keep it alive via a
+    // documented Voice Agent control message after the Settings handshake.
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    heartbeatRef.current = setInterval(() => {
+      if (wsRef.current === ws && agentReadyRef.current &&
+          ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "KeepAlive" }));
+      }
+    }, 5000);
+
     ws.onopen = () => {
       if (wsRef.current !== ws || shuttingDownRef.current) return;
-      reconnectAttemptsRef.current = 0;
       // Prevent an apparently connected socket from hanging forever
       // when the agent fails to acknowledge the settings handshake.
       if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
@@ -429,7 +443,9 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
           : event.data instanceof Blob
             ? await event.data.arrayBuffer()
             : null;
-        if (buf) engineRef.current?.playPCM(buf);
+        if (buf && wsRef.current === ws && !shuttingDownRef.current) {
+          engineRef.current?.playPCM(buf);
+        }
         return;
       }
 
@@ -446,6 +462,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
     ws.onclose = () => {
       if (wsRef.current !== ws) return;
+      agentReadyRef.current = false;
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
       if (handshakeTimeoutRef.current) {
         clearTimeout(handshakeTimeoutRef.current);
         handshakeTimeoutRef.current = null;
@@ -526,7 +547,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     const engine = new AudioEngine({
       onMicChunk: (buf) => {
         const ws = wsRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN || !agentReadyRef.current) return;
+        if (ws.bufferedAmount > 1024 * 1024) return; // protect memory during network stalls
         try { ws.send(buf); } catch {}
       },
       onInputLevel: (lvl) => {
@@ -564,6 +586,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     shuttingDownRef.current = true;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    agentReadyRef.current = false;
     if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
     for (const controller of pendingCallsRef.current.values()) controller.abort();
     pendingCallsRef.current.clear();
@@ -600,7 +624,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       listeningRef.current = false;
       setStatus({ mode: "idle", text: "microphone muted" });
     } else {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
+      if (wsRef.current?.readyState === WebSocket.OPEN && agentReadyRef.current) {
         await engineRef.current.startMicrophone();
         listeningRef.current = true;
         setStatus({ mode: "listening", text: "listening..." });
@@ -613,7 +637,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const sendText = useCallback((raw: string) => {
     const content = raw.trim();
     const ws = wsRef.current;
-    if (!content || content.length > 2000 || !ws || ws.readyState !== WebSocket.OPEN) return false;
+    if (!content || content.length > 2000 || !ws || ws.readyState !== WebSocket.OPEN || !agentReadyRef.current) return false;
     ws.send(JSON.stringify({ type: "InjectUserMessage", content }));
     setTranscript(content);
     setStatus({ mode: "thinking", text: "thinking..." });
