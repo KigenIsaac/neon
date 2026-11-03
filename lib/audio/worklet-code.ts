@@ -1,4 +1,6 @@
 export const AUDIO_WORKLET_CODE = `
+// Audio rendering is real-time: never concatenate or slice a growing playback
+// buffer here. Keep a preallocated bounded ring instead.
 class MicrophoneProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -17,8 +19,8 @@ class MicrophoneProcessor extends AudioWorkletProcessor {
     const start = this.totalInput;
     const end = start + input.length;
 
-    // Phase-accurate streaming linear resampling; no growing/copying
-    // Float32Array on the audio render thread.
+    // Continuous phase across arbitrary input block sizes and hardware rates
+    // (44.1 kHz, 48 kHz, 96 kHz, etc). A previous boundary sample is retained.
     while (this.nextOutput < end - 1) {
       const position = this.nextOutput - start;
       const index = Math.floor(position);
@@ -26,12 +28,9 @@ class MicrophoneProcessor extends AudioWorkletProcessor {
       const a = index < 0 ? this.previousSample : input[index];
       const b = input[index + 1];
       const value = a * (1 - fraction) + b * fraction;
-      const clipped = Math.max(-1, Math.min(1, value));
+      const clipped = Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
       this.frame[this.frameCount++] = clipped < 0 ? clipped * 32768 : clipped * 32767;
       this.nextOutput += this.step;
-
-      // Emit 20 ms chunks, reducing port events without adding
-      // excessive microphone latency.
       if (this.frameCount === this.frame.length) {
         const output = this.frame;
         this.frame = new Int16Array(480);
@@ -44,133 +43,216 @@ class MicrophoneProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
+
 class AgentPlaybackProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.inputRate = 24000;
-    this.lastLevel = 0;
     this.ratio = this.inputRate / sampleRate;
-    this.prebufferSamples = 1440;
-    this.buffer = new Float32Array(0);
-    this.position = 0;
+    this.capacity = 1 << 18; // 10.9 s of PCM at 24 kHz, fixed-size allocation
+    this.mask = this.capacity - 1;
+    this.ring = new Float32Array(this.capacity);
+    this.readIndex = 0;
+    this.writeIndex = 0;
+    this.phase = 0;
+
+    // Start with 100 ms; increase after real underruns on jittery connections.
+    this.minPrebuffer = Math.round(this.inputRate * 0.10);
+    this.maxPrebuffer = Math.round(this.inputRate * 0.28);
+    this.prebufferSamples = this.minPrebuffer;
+    this.maxQueuedSamples = this.inputRate * 6;
+    this.lastUnderrunSample = -Infinity;
+    this.underrunCooldownSamples = Math.round(sampleRate * 0.25);
+    this.stablePlaybackSamples = 0;
+    this.outputGain = 0;
+    this.fadeStep = 1 / Math.max(1, Math.round(sampleRate * 0.006));
+    this.lastLevel = 0;
+    this.processedFrames = 0;
+    this.lastTelemetryFrame = 0;
+
     this.state = "idle";
     this.serverDone = false;
     this.generation = 0;
-    this.totalPlayedSamples = 0;
-    this.lastTelemetryFrame = 0;
-    this.lastUnderrunFrame = -Infinity;
-    this.underrunCooldownFrames = Math.round(sampleRate * 0.25);
-    this.port.onmessage = (e) => {
-      const d = e.data; if (!d || typeof d.type !== "string") return;
-      if (d.type === "audio") {
-        if (!Number.isFinite(d.generation) || d.generation === this.generation) this.appendPCM(d.buffer);
+
+    this.port.onmessage = (event) => {
+      const data = event.data;
+      if (!data || typeof data.type !== "string") return;
+      if (data.type === "audio") {
+        if (Number.isFinite(data.generation) && data.generation !== this.generation) return;
+        this.appendPCM(data.buffer);
+      } else if (data.type === "server-done") {
+        if (Number.isFinite(data.generation) && data.generation !== this.generation) return;
+        this.serverDone = true;
+        this.maybeNotifyDrain();
+      } else if (data.type === "flush" || data.type === "reset") {
+        this.flush(data.generation);
       }
-      else if (d.type === "server-done") {
-        if (Number.isFinite(d.generation) && d.generation !== this.generation) return;
-        this.serverDone = true; this.maybeNotifyDrain();
-      } else if (d.type === "flush" || d.type === "reset") this.flush(d.generation);
     };
   }
-  availableSamples() { return Math.max(0, this.buffer.length - this.position); }
-  appendPCM(ab) {
-    if (!ab || ab.byteLength < 2) return;
-    const usable = ab.byteLength - (ab.byteLength % 2);
-    if (usable <= 0) return;
-    const pcm = new Int16Array(ab, 0, usable / 2);
-    const incoming = new Float32Array(pcm.length);
+
+  availableSamples() {
+    return Math.max(0, this.writeIndex - this.readIndex - this.phase);
+  }
+
+  notifyState(state) {
+    if (this.state === state) return;
+    this.state = state;
+    this.port.postMessage({ type: "state", state, generation: this.generation });
+  }
+
+  appendPCM(buffer) {
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 2) return;
+    const usable = buffer.byteLength - (buffer.byteLength % 2);
+    if (!usable) return;
+    const pcm = new Int16Array(buffer, 0, usable / 2);
     for (let i = 0; i < pcm.length; i++) {
-      const v = pcm[i]; incoming[i] = v < 0 ? v / 32768 : v / 32767;
+      // Cap the oldest queued audio if the producer runs vastly ahead of
+      // playback. Normal conversations never approach this six-second cap.
+      if (this.writeIndex - this.readIndex >= this.maxQueuedSamples) {
+        const skip = this.writeIndex - this.readIndex - this.inputRate * 3;
+        this.readIndex += Math.max(1, skip);
+        this.phase = 0;
+        this.outputGain = 0;
+        this.port.postMessage({ type: "overflow", generation: this.generation });
+      }
+      const value = pcm[i];
+      this.ring[this.writeIndex & this.mask] = value < 0 ? value / 32768 : value / 32767;
+      this.writeIndex++;
     }
-    const start = Math.floor(this.position);
-    const frac = this.position - start;
-    const remLen = Math.max(0, this.buffer.length - start);
-    const combined = new Float32Array(remLen + incoming.length);
-    if (remLen > 0) combined.set(this.buffer.subarray(start), 0);
-    combined.set(incoming, remLen);
-    this.buffer = combined; this.position = frac; this.serverDone = false;
+    this.serverDone = false;
     if (this.state === "idle" || this.state === "drained") {
-      this.state = "buffering"; this.notifyState("buffering");
-    }
-    if (this.state === "buffering" && this.availableSamples() >= this.prebufferSamples) {
-      this.state = "playing"; this.notifyState("playing");
+      this.outputGain = 0;
+      this.notifyState("buffering");
     }
   }
-  flush(gen) {
-    this.buffer = new Float32Array(0); this.position = 0;
-    this.serverDone = false; this.state = "idle"; this.totalPlayedSamples = 0;
-    if (Number.isFinite(gen)) this.generation = gen; else this.generation++;
+
+  flush(generation) {
+    this.readIndex = 0;
+    this.writeIndex = 0;
+    this.phase = 0;
+    this.serverDone = false;
+    this.outputGain = 0;
+    this.lastLevel = 0;
+    this.stablePlaybackSamples = 0;
+    this.prebufferSamples = this.minPrebuffer;
+    if (Number.isFinite(generation)) this.generation = generation;
+    else this.generation++;
+    this.notifyState("idle");
     this.port.postMessage({ type: "flushed", generation: this.generation });
   }
-  notifyState(s) { this.port.postMessage({ type: "state", state: s, generation: this.generation }); }
-  notifyTelemetry(force = false) {
-    const iv = Math.round(sampleRate * 0.10);
-    if (!force && (currentFrame - this.lastTelemetryFrame) < iv) return;
-    this.lastTelemetryFrame = currentFrame;
-    this.port.postMessage({
-      type: "telemetry", state: this.state,
-      samples: Math.max(0, Math.floor(this.availableSamples())),
-      level: Math.max(0, Math.min(1, this.lastLevel || 0)),
-      generation: this.generation
-    });
-  }
-  notifyUnderrun() {
-    if ((currentFrame - this.lastUnderrunFrame) < this.underrunCooldownFrames) return;
-    this.lastUnderrunFrame = currentFrame;
-    this.port.postMessage({ type: "underrun", generation: this.generation });
-  }
+
   maybeNotifyDrain() {
-    if (!this.serverDone) return;
-    if (this.availableSamples() > 0.5) return;
-    if (this.state === "drained") return;
-    this.state = "drained";
-    this.port.postMessage({ type: "state", state: "drained", generation: this.generation });
+    if (!this.serverDone || this.availableSamples() > 0 || this.state === "drained") return;
+    this.notifyState("drained");
     this.port.postMessage({ type: "drained", generation: this.generation });
   }
+
+  notifyTelemetry() {
+    if (this.processedFrames - this.lastTelemetryFrame < sampleRate * 0.10) return;
+    this.lastTelemetryFrame = this.processedFrames;
+    this.port.postMessage({
+      type: "telemetry",
+      generation: this.generation,
+      state: this.state,
+      samples: Math.floor(this.availableSamples()),
+      bufferedMs: Math.round(this.availableSamples() / this.inputRate * 1000),
+      level: Math.max(0, Math.min(1, this.lastLevel))
+    });
+  }
+
   process(_inputs, outputs) {
-    const out = outputs[0]; if (!out || !out[0]) return true;
-    const ch = out[0]; ch.fill(0);
-    if (this.state === "idle") { this.notifyTelemetry(); return true; }
+    const channels = outputs[0];
+    if (!channels || !channels[0]) return true;
+    const output = channels[0];
+    // Output is mono by design; make any unexpected additional channels
+    // silent rather than playing undefined data.
+    for (const channel of channels) channel.fill(0);
+    this.processedFrames += output.length;
+
     if (this.state === "buffering") {
-      if (this.availableSamples() >= this.prebufferSamples) {
-        this.state = "playing"; this.notifyState("playing");
-      } else if (this.serverDone && this.availableSamples() > 1) {
-        this.state = "playing"; this.notifyState("playing");
-      } else { this.notifyTelemetry(); this.maybeNotifyDrain(); return true; }
+      if (this.availableSamples() >= this.prebufferSamples ||
+          (this.serverDone && this.availableSamples() > 0)) {
+        this.notifyState("playing");
+      } else {
+        this.maybeNotifyDrain();
+        this.notifyTelemetry();
+        return true;
+      }
     }
-    if (this.state !== "playing") { this.maybeNotifyDrain(); this.notifyTelemetry(); return true; }
-    let position = this.position; let produced = 0;
+    if (this.state !== "playing") {
+      this.maybeNotifyDrain();
+      this.notifyTelemetry();
+      return true;
+    }
+
+    let rendered = 0;
     let maxAbs = 0;
-    for (let i = 0; i < ch.length; i++) {
-      const i0 = Math.floor(position), i1 = i0 + 1;
-      if (i1 >= this.buffer.length) break;
-      const f = position - i0;
-      ch[i] = this.buffer[i0] * (1 - f) + this.buffer[i1] * f;
-      const abs = Math.abs(ch[i]); if (abs > maxAbs) maxAbs = abs;
-      position += this.ratio; produced++;
+    for (let i = 0; i < output.length; i++) {
+      const queued = this.writeIndex - this.readIndex;
+      if (queued <= 0 || (queued === 1 && !this.serverDone)) break;
+      const first = this.ring[this.readIndex & this.mask];
+      const second = queued > 1 ? this.ring[(this.readIndex + 1) & this.mask] : first;
+      let sample = first + (second - first) * this.phase;
+
+      // De-click: fade in after starting/rebuffering and fade down if the
+      // producer runs dry or after its final packet. Avoid hard transitions.
+      this.outputGain = Math.min(1, this.outputGain + this.fadeStep);
+      const remaining = queued - this.phase;
+      const fadeOut = Math.min(1, remaining / (this.inputRate * 0.004));
+      sample *= this.outputGain * fadeOut * 0.98;
+
+      output[i] = sample;
+      const magnitude = Math.abs(sample);
+      if (magnitude > maxAbs) maxAbs = magnitude;
+      this.phase += this.ratio;
+      const whole = Math.floor(this.phase);
+      if (whole) {
+        this.readIndex += whole;
+        this.phase -= whole;
+      }
+      rendered++;
     }
-    const consumed = Math.floor(position);
-    // Compact only occasionally: slicing on every 128-sample quantum
-    // previously generated avoidable garbage-collector pressure.
-    if (consumed >= 2048 || consumed > this.buffer.length / 2) {
-      this.buffer = this.buffer.slice(consumed);
-      position -= consumed;
+
+    if (rendered < output.length) {
+      if (this.serverDone) {
+        // A final mono sample may have been linearly interpolated twice on
+        // 48 kHz devices. Now the queued audio really has finished.
+        this.readIndex = this.writeIndex;
+        this.phase = 0;
+        this.maybeNotifyDrain();
+      } else {
+        if (this.processedFrames - this.lastUnderrunSample > this.underrunCooldownSamples) {
+          this.lastUnderrunSample = this.processedFrames;
+          this.prebufferSamples = Math.min(
+            this.maxPrebuffer, this.prebufferSamples + Math.round(this.inputRate * 0.04)
+          );
+          this.port.postMessage({
+            type: "underrun", generation: this.generation,
+            targetBufferMs: Math.round(this.prebufferSamples / this.inputRate * 1000)
+          });
+        }
+        this.stablePlaybackSamples = 0;
+        this.outputGain = 0;
+        this.notifyState("buffering");
+      }
+    } else {
+      this.stablePlaybackSamples += rendered;
+      // Gradually decrease latency again after ten seconds without glitches.
+      if (this.stablePlaybackSamples >= sampleRate * 10) {
+        this.stablePlaybackSamples = 0;
+        this.prebufferSamples = Math.max(
+          this.minPrebuffer, this.prebufferSamples - Math.round(this.inputRate * 0.02)
+        );
+      }
+      if (this.serverDone) this.maybeNotifyDrain();
     }
-    this.position = position; this.totalPlayedSamples += produced;
-    const remaining = this.availableSamples();
-    if (produced < ch.length && !this.serverDone && remaining < 1) {
-      this.state = "buffering"; this.notifyState("buffering"); this.notifyUnderrun();
-    }
-    if (this.serverDone && remaining <= 1) {
-      this.buffer = new Float32Array(0); this.position = 0;
-      this.state = "drained"; this.notifyState("drained");
-      this.port.postMessage({ type: "drained", generation: this.generation });
-    }
+
+    this.lastLevel = Math.max(maxAbs, this.lastLevel * 0.94);
     this.notifyTelemetry();
-    // stronger smoothing: keep peaks but decay slowly for smoother visuals
-    this.lastLevel = Math.max(maxAbs, (this.lastLevel || 0) * 0.96);
     return true;
   }
 }
+
 registerProcessor("microphone-processor", MicrophoneProcessor);
 registerProcessor("agent-playback-processor", AgentPlaybackProcessor);
 `;
