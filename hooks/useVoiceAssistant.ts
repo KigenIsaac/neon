@@ -624,6 +624,17 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       return;
     }
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    const oldSocket = wsRef.current;
+    if (oldSocket) {
+      wsRef.current = null;
+      oldSocket.onclose = null;
+      oldSocket.close();
+      engineRef.current?.stopMicrophone();
+      engineRef.current?.stopPlayback();
+    }
+    agentReadyRef.current = false;
     reconnectAttemptsRef.current = 0;
     await connectAgent();
   }, [started, start, connectAgent]);
