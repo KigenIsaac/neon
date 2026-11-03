@@ -3,7 +3,7 @@ import { LLM_PROMPT } from "./prompt";
 
 export const AGENT_CONFIG: AgentConfig = {
   DEEPGRAM_AGENT_URL: "wss://agent.deepgram.com/v1/agent/converse",
-  INPUT_SAMPLE_RATE: 24000,
+  INPUT_SAMPLE_RATE: 16000,
   OUTPUT_SAMPLE_RATE: 24000,
   STT_MODEL: "nova-3",
   TTS_MODEL: "aura-2-zeus-en",
