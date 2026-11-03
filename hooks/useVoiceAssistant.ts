@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioEngine } from "@/lib/audio/engine";
+import type { PlaybackDiagnostics } from "@/lib/audio/native-player";
 import { AGENT_CONFIG, buildSettings, type HistoryTurn } from "@/lib/agent/settings";
 import { inferScene } from "@/lib/visuals/heuristics";
 import { parseScene } from "@/lib/visuals/validation";
@@ -44,6 +45,9 @@ export interface UseVoiceAssistantResult {
   transcript: string;
   messages: HistoryTurn[];
   lastLatencyMs: number | null;
+  audioDiagnostics: PlaybackDiagnostics | null;
+  microphoneDevice: string | null;
+  speechInterruptions: number;
   storageWarning: boolean;
   greeting: string;
   scene: Scene | null;
@@ -64,6 +68,10 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [transcript, setTranscript] = useState("");
   const [messages, setMessages] = useState<HistoryTurn[]>([]);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [audioDiagnostics, setAudioDiagnostics] = useState<PlaybackDiagnostics | null>(null);
+  const [microphoneDevice, setMicrophoneDevice] = useState<string | null>(null);
+  const [speechInterruptions, setSpeechInterruptions] = useState(0);
+  const agentPlaybackActiveRef = useRef(false);
   const [storageWarning, setStorageWarning] = useState(false);
   const [greeting, setGreeting] = useState("");
   const [scene, setScene] = useState<Scene | null>(null);
@@ -252,6 +260,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         }
         break;
       case "UserStartedSpeaking":
+        if (agentPlaybackActiveRef.current) setSpeechInterruptions((count) => count + 1);
         engineRef.current?.stopPlayback();
         sceneFromToolRef.current = false;
         setStatus({ mode: "listening", text: "listening..." });
@@ -541,6 +550,10 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     recentHistoryRef.current = [];
     setMessages([]);
     setLastLatencyMs(null);
+    setAudioDiagnostics(null);
+    setMicrophoneDevice(null);
+    setSpeechInterruptions(0);
+    agentPlaybackActiveRef.current = false;
     setStorageWarning(false);
     try {
       if (existingConversationId) {
@@ -586,9 +599,12 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         }
       },
       onSpeakingChange: (speaking) => {
+        agentPlaybackActiveRef.current = speaking;
         if (speaking) holdScene();
         else releaseScene();
       },
+      onPlaybackDiagnostics: (data) => setAudioDiagnostics(data),
+      onMicrophoneDevice: (label) => setMicrophoneDevice(label),
       onDrained: () => {
         if (listeningRef.current) {
           setStatus({ mode: "listening", text: "listening..." });
@@ -631,6 +647,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     listeningRef.current = false;
     void engineRef.current?.shutdown();
     engineRef.current = null;
+    agentPlaybackActiveRef.current = false;
     wsRef.current?.close();
     wsRef.current = null;
     setStarted(false);
@@ -717,5 +734,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, messages, lastLatencyMs, storageWarning, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, messages, lastLatencyMs, audioDiagnostics, microphoneDevice, speechInterruptions, storageWarning, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
