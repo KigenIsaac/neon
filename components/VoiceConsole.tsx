@@ -14,7 +14,7 @@ import { TranscriptDrawer } from "./TranscriptDrawer";
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
-    started, status, transcript, messages, greeting, scene, level, muted,
+    started, status, transcript, messages, lastLatencyMs, greeting, scene, level, muted,
     pendingSaveNote, resolveSaveNote,
     start, shutdown, retry, toggleMute, sendText
   } = useVoiceAssistant(session);
@@ -73,6 +73,9 @@ export function VoiceConsole() {
         <div id="greeting" className={greeting ? "show" : ""}>{greeting}</div>
         <div className="status-container">
           <StatusBar mode={status.mode} text={status.text} />
+          {lastLatencyMs !== null && <span className="latency-chip" aria-label="Latest voice provider latency">
+            Provider latency: {lastLatencyMs.toLocaleString()} ms
+          </span>}
           <TranscriptPanel text={transcript} />
           {started && (
             <>
