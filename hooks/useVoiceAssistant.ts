@@ -31,6 +31,7 @@ interface AgentMessage {
   code?: string | number;
   error?: { message?: string; description?: string };
   functions?: AgentFunctionCall[];
+  total_latency?: number;
 }
 
 interface VisualSceneArguments {
@@ -42,6 +43,7 @@ export interface UseVoiceAssistantResult {
   status: { mode: StatusMode; text: string };
   transcript: string;
   messages: HistoryTurn[];
+  lastLatencyMs: number | null;
   greeting: string;
   scene: Scene | null;
   level: number;
@@ -60,6 +62,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [status, setStatus] = useState<{ mode: StatusMode; text: string }>({ mode: "idle", text: "idle" });
   const [transcript, setTranscript] = useState("");
   const [messages, setMessages] = useState<HistoryTurn[]>([]);
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [greeting, setGreeting] = useState("");
   const [scene, setScene] = useState<Scene | null>(null);
 
@@ -247,6 +250,13 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         }
         break;
       }
+      case "LatencyReport":
+        if (typeof data.total_latency === "number" &&
+            Number.isFinite(data.total_latency) &&
+            data.total_latency >= 0 && data.total_latency < 120) {
+          setLastLatencyMs(Math.round(data.total_latency * 1000));
+        }
+        break;
       case "AgentThinking":
         setStatus({ mode: "thinking", text: "thinking..." });
         break;
@@ -485,6 +495,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     conversationIdRef.current = null;
     recentHistoryRef.current = [];
     setMessages([]);
+    setLastLatencyMs(null);
     try {
       if (existingConversationId) {
         const res = await fetch(`/api/conversations/${encodeURIComponent(existingConversationId)}`, {
@@ -623,5 +634,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, messages, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, messages, lastLatencyMs, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
