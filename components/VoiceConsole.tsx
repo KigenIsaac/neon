@@ -9,7 +9,7 @@ import { TranscriptPanel } from "./TranscriptPanel";
 import { SceneStage } from "./SceneStage";
 
 export function VoiceConsole() {
-  const { session, loading } = useSession();
+  const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
     started, status, transcript, greeting, scene, level, muted,
     start, shutdown, retry, toggleMute, sendText
@@ -51,11 +51,13 @@ export function VoiceConsole() {
         level={level}
       />
       <StartOverlay
-        visible={!started && ready} disabled={!ready}
+        visible={!started} disabled={!ready}
         onStart={() => { void start(); }}
         conversations={recent}
         onResume={(id) => { void start(id); }}
         onDelete={(id) => { void deleteConversation(id); }}
+        error={authError}
+        onRetryAuth={authError ? retryAuth : undefined}
       />
       <SceneStage scene={scene} />
       <main className="ui-overlay">
