@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseScene } from "@/lib/visuals/validation";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_SCENE_BYTES = 64 * 1024;
@@ -25,6 +26,11 @@ export async function POST(
   const scene = body?.scene;
   const turnId = body?.turn_id ?? null;
 
+  const sanitizedScene = parseScene(scene);
+  if (!sanitizedScene) {
+    return NextResponse.json({ error: "Invalid scene schema" }, { status: 400 });
+  }
+
   if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
     return NextResponse.json({ error: "Missing scene" }, { status: 400 });
   }
@@ -49,7 +55,7 @@ export async function POST(
     .insert({
       conversation_id: id,
       turn_id: turnId,
-      payload: scene
+      payload: sanitizedScene
     });
 
   if (error) {
