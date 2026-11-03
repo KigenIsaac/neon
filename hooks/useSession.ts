@@ -8,13 +8,15 @@ export function useSession() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const retry = useCallback(() => setAttempt((x) => x + 1), []);
+  const retry = useCallback(() => {
+    setLoading(true);
+    setError("");
+    setAttempt((x) => x + 1);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
     let mounted = true;
-    setLoading(true);
-    setError("");
 
     void (async () => {
       try {
