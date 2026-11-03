@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { readBoundedJson } from "@/lib/server/read-json";
 
 const MAX_NOTE_LENGTH = 600;
 const MAX_QUERY_LENGTH = 120;
@@ -40,14 +41,9 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const raw = await req.text();
-  if (raw.length > 2048) {
-    return NextResponse.json({ error: "Request too large" }, { status: 413 });
-  }
-  let body: unknown;
-  try { body = JSON.parse(raw); } catch { body = null; }
-  const content = typeof body === "object" && body && "content" in body
-    ? (body as {content?: unknown}).content : null;
+  const parsed = await readBoundedJson(req, 2048);
+  if (parsed.error) return parsed.error;
+  const content = (parsed.value as {content?: unknown}).content;
   if (typeof content !== "string" || !content.trim() || content.trim().length > MAX_NOTE_LENGTH) {
     return NextResponse.json({ error: "Note must be between 1 and 600 characters" }, { status: 400 });
   }
