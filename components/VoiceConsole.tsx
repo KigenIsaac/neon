@@ -59,6 +59,7 @@ export function VoiceConsole() {
       <StartOverlay
         visible={!started} disabled={!ready}
         onStart={() => { void start(); }}
+        onStartText={() => { void start(undefined, "text"); }}
         conversations={recent}
         onResume={(id) => { void start(id); }}
         onDelete={(id) => { void deleteConversation(id); }}
