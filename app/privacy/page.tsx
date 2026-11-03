@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Privacy and data | NEON",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="privacy-page">
-      <a href="/" className="privacy-back">← Back to NEON</a>
+      <Link href="/" className="privacy-back">← Back to NEON</Link>
       <h1>Privacy and data</h1>
       <p className="privacy-lead">NEON is an experimental voice-first AI application. This page explains what the software is designed to do with your data.</p>
 
