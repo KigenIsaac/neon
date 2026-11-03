@@ -8,6 +8,7 @@ export interface AudioEngineCallbacks {
   onSpeakingChange?: (speaking: boolean) => void;
   onInputLevel?: (level: number, source?: string) => void;
   onPlaybackDiagnostics?: (diagnostics: PlaybackDiagnostics) => void;
+  onMicrophoneDevice?: (label: string | null) => void;
 }
 
 export class AudioEngine {
@@ -76,6 +77,7 @@ export class AudioEngine {
         return;
       }
       this.mediaStream = stream;
+      this.cb.onMicrophoneDevice?.(stream.getAudioTracks()[0]?.label || null);
     }).finally(() => {
       if (this.micRequest === promise) this.micRequest = null;
     });
@@ -126,6 +128,7 @@ export class AudioEngine {
 
   stopMicrophone() {
     this.microphoneEpoch++;
+    this.cb.onMicrophoneDevice?.(null);
     this.micRequest = null;
     if (this.micWorklet) {
       this.micWorklet.port.onmessage = null;
