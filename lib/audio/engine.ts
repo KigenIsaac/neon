@@ -1,4 +1,5 @@
 import { AUDIO_WORKLET_CODE } from "./worklet-code";
+import { NativePcmPlayer, type PlaybackDiagnostics } from "./native-player";
 
 export interface AudioEngineCallbacks {
   onMicChunk?: (buffer: ArrayBuffer) => void;
@@ -6,12 +7,13 @@ export interface AudioEngineCallbacks {
   onDrained?: () => void;
   onSpeakingChange?: (speaking: boolean) => void;
   onInputLevel?: (level: number, source?: string) => void;
+  onPlaybackDiagnostics?: (diagnostics: PlaybackDiagnostics) => void;
 }
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
   private workletUrl: string | null = null;
-  private playbackWorklet: AudioWorkletNode | null = null;
+  private player: NativePcmPlayer | null = null;
   private micWorklet: AudioWorkletNode | null = null;
   private micOutputSink: GainNode | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
@@ -19,14 +21,12 @@ export class AudioEngine {
   private micRequest: Promise<void> | null = null;
   private microphoneEpoch = 0;
 
-  private playbackGeneration = 0;
-  private playbackState: "idle" | "buffering" | "playing" | "drained" = "idle";
 
   constructor(private cb: AudioEngineCallbacks = {}) {}
 
   async initialize({ microphone = true }: { microphone?: boolean } = {}) {
     if (!this.audioCtx || this.audioCtx.state === "closed") {
-      this.audioCtx = new AudioContext({ latencyHint: "interactive" });
+      this.audioCtx = new AudioContext({ latencyHint: "balanced" });
     }
     if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
     if (this.audioCtx.state !== "running") throw new Error("AudioContext not running");
@@ -43,13 +43,14 @@ export class AudioEngine {
       }
     }
 
-    if (!this.playbackWorklet) {
-      this.playbackWorklet = new AudioWorkletNode(
-        this.audioCtx, "agent-playback-processor",
-        { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] }
-      );
-      this.playbackWorklet.port.onmessage = (e) => this.onPlaybackMessage(e.data);
-      this.playbackWorklet.connect(this.audioCtx.destination);
+    if (!this.player) {
+      this.player = new NativePcmPlayer(this.audioCtx, {
+        onState: (state) => this.cb.onPlaybackState?.(state),
+        onSpeaking: (speaking) => this.cb.onSpeakingChange?.(speaking),
+        onLevel: (level) => this.cb.onInputLevel?.(level, "playback"),
+        onDrained: () => this.cb.onDrained?.(),
+        onDiagnostics: (data) => this.cb.onPlaybackDiagnostics?.(data)
+      });
     }
 
     if (microphone) await this.enableMicrophone();
@@ -150,67 +151,22 @@ export class AudioEngine {
   }
 
   playPCM(ab: ArrayBuffer) {
-    if (!this.playbackWorklet || ab.byteLength < 2) return;
-    const usable = ab.byteLength - (ab.byteLength % 2);
-    if (usable <= 0) return;
-    // WebSocket binary frames are already owned ArrayBuffers: transfer them
-    // to the worklet instead of copying on every incoming TTS packet.
-    const buf = usable === ab.byteLength ? ab : ab.slice(0, usable);
+    if (!this.player || ab.byteLength < 2) return;
     try {
-      this.playbackWorklet.port.postMessage(
-        { type: "audio", generation: this.playbackGeneration, buffer: buf },
-        [buf]
-      );
-      this.playbackState = "buffering";
-      this.cb.onSpeakingChange?.(true);
-    } catch (err) {
-      console.error("playPCM post error", err);
+      this.player.queue(ab);
+    } catch (error) {
+      // Fail visibly instead of silently waiting forever in buffering state.
+      console.error("PCM playback failed", error);
+      this.cb.onPlaybackState?.("idle");
     }
   }
 
   signalServerDone() {
-    this.playbackWorklet?.port.postMessage({
-      type: "server-done",
-      generation: this.playbackGeneration
-    });
+    this.player?.serverAudioDone();
   }
 
   stopPlayback() {
-    this.playbackGeneration++;
-    this.playbackState = "idle";
-    this.playbackWorklet?.port.postMessage({
-      type: "flush",
-      generation: this.playbackGeneration
-    });
-    this.cb.onSpeakingChange?.(false);
-  }
-
-  private onPlaybackMessage(d: unknown) {
-    if (!d || typeof d !== "object") return;
-
-    const message = d as {
-      type?: "telemetry" | "state" | "drained";
-      level?: unknown;
-      generation?: number;
-      state?: "idle" | "buffering" | "playing" | "drained";
-    };
-
-    switch (message.type) {
-      case "telemetry":
-        if (message.level !== undefined) this.cb.onInputLevel?.(Math.max(0, Math.min(1, Number(message.level) || 0)), "playback");
-        break;
-      case "state":
-        if (message.generation !== this.playbackGeneration || !message.state) return;
-        this.playbackState = message.state;
-        this.cb.onPlaybackState?.(message.state);
-        if (message.state === "playing") this.cb.onSpeakingChange?.(true);
-        break;
-      case "drained":
-        if (message.generation !== this.playbackGeneration) return;
-        this.cb.onSpeakingChange?.(false);
-        this.cb.onDrained?.();
-        break;
-    }
+    this.player?.interrupt();
   }
 
   async shutdown() {
@@ -219,11 +175,8 @@ export class AudioEngine {
       this.mediaStream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
       this.mediaStream = null;
     }
-    if (this.playbackWorklet) {
-      try { this.playbackWorklet.port.onmessage = null; } catch {}
-      try { this.playbackWorklet.disconnect(); } catch {}
-      this.playbackWorklet = null;
-    }
+    this.player?.dispose();
+    this.player = null;
     if (this.workletUrl) {
       try { URL.revokeObjectURL(this.workletUrl); } catch {}
       this.workletUrl = null;
