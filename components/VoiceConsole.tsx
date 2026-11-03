@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "@/hooks/useSession";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { NeonOrb } from "./NeonOrb";
-import { StartOverlay } from "./StartOverlay";
+import { StartOverlay, type RecentConversation } from "./StartOverlay";
 import { StatusBar } from "./StatusBar";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { SceneStage } from "./SceneStage";
@@ -16,7 +16,33 @@ export function VoiceConsole() {
   } = useVoiceAssistant(session);
   const [message, setMessage] = useState("");
   const [sendError, setSendError] = useState("");
+  const [recent, setRecent] = useState<RecentConversation[]>([]);
   const ready = !loading && !!session;
+
+  useEffect(() => {
+    if (!ready || started) return;
+    const controller = new AbortController();
+    void fetch("/api/conversations", { cache: "no-store", signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("History unavailable");
+        return res.json() as Promise<{conversations?: RecentConversation[]}>;
+      })
+      .then((data) => { if (!controller.signal.aborted) setRecent(data.conversations ?? []); })
+      .catch((error) => { if (!controller.signal.aborted) console.warn("history unavailable", error); });
+    return () => controller.abort();
+  }, [ready, started]);
+
+  const deleteConversation = async (id: string) => {
+    if (!window.confirm("Permanently delete this conversation and its scenes?")) return;
+    try {
+      const res = await fetch(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Unable to delete conversation");
+      setRecent((items) => items.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error("delete failed", error);
+      window.alert("Could not delete this conversation. Please try again.");
+    }
+  };
 
   return (
     <>
@@ -24,7 +50,13 @@ export function VoiceConsole() {
         voiceType={status.mode === "listening" ? "user" : status.mode === "speaking" ? "assistant" : "idle"}
         level={level}
       />
-      <StartOverlay visible={!started && ready} disabled={!ready} onStart={start} />
+      <StartOverlay
+        visible={!started && ready} disabled={!ready}
+        onStart={() => { void start(); }}
+        conversations={recent}
+        onResume={(id) => { void start(id); }}
+        onDelete={(id) => { void deleteConversation(id); }}
+      />
       <SceneStage scene={scene} />
       <main className="ui-overlay">
         <div id="greeting" className={greeting ? "show" : ""}>{greeting}</div>
