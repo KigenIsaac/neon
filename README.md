@@ -1,6 +1,6 @@
 # 🌌 NEON — Real-Time Voice AI
 
-> **A cinematic real-time voice assistant built with Next.js, Deepgram, Supabase, WebSockets, custom audio processing, and persistent conversational state.**
+> **A cinematic real-time voice assistant built with Next.js, Deepgram, Supabase, WebSockets, Deepgram's official browser SDK, and persistent conversational state.**
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -46,8 +46,8 @@ flowchart LR
     DG --> CE[Conversation Events]
     DG --> VS[visual_scene]
 
-    AR --> PB[Playback Buffer]
-    PB --> SP[Speaker]
+    AR --> PB[Official AgentPlayer]
+    PB --> SP[Browser audio output]
 
     VS --> SC[Scene State]
     SC --> UI[Neon Orb / Visual UI]
@@ -66,16 +66,16 @@ The project is intentionally built around several systems working together.
 
 The browser captures microphone audio and streams it to the conversational agent.
 
-The audio layer handles:
+The **official `@deepgram/agents` SDK** handles:
 
-- Microphone capture
-- `AudioContext`
-- `AudioWorklet`
-- PCM audio
-- Resampling to 24 kHz
-- Streaming
-- Playback buffering
-- Audio telemetry
+- Microphone capture via `AgentMicrophone`, 16 kHz PCM
+- Audio transport and automatic reconnection via `AgentSession`
+- Playback and device-rate conversion via `AgentPlayer`, 24 kHz PCM
+- KeepAlive, session handshakes and barge-in
+- Browser analyser-based volume telemetry
+
+NEON no longer implements its own audio capture/resampler, WebSocket
+reconnect system or speaker playback buffer.
 
 This makes the application fundamentally different from a conventional request/response chatbot.
 
@@ -191,36 +191,25 @@ The server-side routes validate authenticated access before allowing conversatio
 
 ---
 
-## ⚡ Audio Architecture
-
-The audio engine is one of the technically interesting parts of the project.
-
-### Capture and streaming
+## ⚡ Official Deepgram Voice Architecture
 
 ```mermaid
 flowchart LR
-    M[Microphone] --> MS[MediaStream]
-    MS --> AC[AudioContext]
-    AC --> AW[AudioWorklet]
-    AW --> PCM[PCM Processing]
-    PCM --> RS[Resampling]
-    RS --> K[24 kHz Stream]
-    K --> D[Voice Agent]
+    MIC[Browser microphone] --> CAP[Deepgram AgentMicrophone]
+    CAP -->|16 kHz PCM| SESSION[Deepgram AgentSession]
+    SESSION <-->|WebSocket, token refresh, reconnect| DG[Deepgram Voice Agent]
+    SESSION -->|24 kHz PCM| PLAYER[Deepgram AgentPlayer]
+    PLAYER --> DEVICE[Browser/OS-selected speakers]
+    SESSION --> EVENTS[Typed SDK events]
+    EVENTS --> UI[NEON React state, scenes and tools]
 ```
 
-### Playback
+NEON pins `@deepgram/agents@0.2.0` and uses all three of the SDK's
+documented browser primitives. The SDK owns audio transport and playback;
+the app retains the NEON UI, note confirmations and database persistence.
 
-```mermaid
-flowchart LR
-    D[Voice Agent] --> A[Audio Data]
-    A --> B[Playback Buffer]
-    B --> C[AudioContext]
-    C --> S[Speaker]
-```
-
-The application also tracks audio-related telemetry used by the interface.
-
----
+**For details, laptop diagnostics and testing instructions,
+read [Voice Architecture](docs/VOICE_ARCHITECTURE.md).**
 
 ## 🌌 Neon Orb Interface
 
@@ -255,7 +244,7 @@ neon/
 │   └── application/session/voice state
 ├── lib/
 │   ├── AI/agent configuration
-│   ├── audio engine
+│   ├── official SDK audio profile
 │   ├── Supabase integration
 │   └── visual helpers
 ├── supabase/
@@ -284,12 +273,10 @@ neon/
 
 ### Audio
 
-- Web Audio API
-- AudioContext
-- AudioWorklet
-- PCM processing
-- Audio resampling
-- Streaming playback
+- `@deepgram/agents@0.2.0` browser SDK
+- `AgentMicrophone` with echo cancellation and noise suppression
+- `AgentSession` with managed WebSocket, tokens and retries
+- `AgentPlayer` with native PCM playback and interruption
 
 ### Backend / Data
 
@@ -377,7 +364,7 @@ npm run typecheck
 npm run build
 ```
 
-CI additionally runs a production dependency audit with `npm audit --omit=dev --audit-level=high`.
+CI additionally runs automated Node tests (`npm test`) and a production dependency audit with `npm audit --omit=dev --audit-level=high`.
 
 ---
 
@@ -508,3 +495,126 @@ CI runs linting, TypeScript checking, a production dependency audit, and a produ
 The architecture is intentionally designed to explore the intersection of:
 
 **AI × Voice × WebSockets × Audio × Persistent State × Interactive UI**
+
+---
+
+## 🛡️ November 2026 Security and Reliability Upgrade
+
+This branch adds **safe client-side agent tools**, stronger connection recovery,
+history resumption, user-controlled note persistence, and database-enforced
+Deepgram token issuance limits. The graphics and voice-first interaction remain
+the core user experience.
+
+### Tools
+
+The Deepgram agent can call these explicitly allowlisted tools:
+
+| Tool | Capability | Confirmation |
+|---|---|---|
+| `calculate` | Parse and evaluate arithmetic safely, without `eval` | No |
+| `get_current_time` | Read the browser's current time and time zone | No |
+| `find_notes` | Search the authenticated user's saved notes | No |
+| `search_history` | Search private conversation transcripts by phrase | No |
+| `save_note` | Store a user-requested private note | **Yes, browser confirmation required** |
+| `visual_scene` | Render a bounded, validated visual explanation | No |
+
+The assistant **cannot** send email, browse the web, run shell commands,
+modify files or execute arbitrary URLs without separate, explicitly reviewed
+integrations. An unsupported tool call returns an error instead of pretending
+the action succeeded.
+
+### Voice and interaction
+
+- Use **Wake the orb** to start a new voice session, or **Start with keyboard**
+  for a text-only session without requesting microphone permission.
+- Resume one of your recent conversations from the start screen.
+- Use **Mute mic**, **End session**, or **Retry connection** to manage audio.
+  Muting releases the browser's active microphone tracks; enabling it again
+  may require user permission.
+- Use the text field to send a message if speaking is inconvenient.
+- Use **Transcript** to review and copy the visible conversation history.
+- Use **Saved notes** to review and delete notes.
+- When you ask NEON to remember a note, approve the actual contents on screen.
+- The official Deepgram SDK sends authenticated keepalives and manages socket
+  reconnection, settings handshakes and token refresh.
+- Previous conversation turns are loaded on resume and reconnect. They are
+  transmitted to the configured voice AI provider for context.
+- The UI respects reduced-motion preferences and adjusts visual layouts on resize.
+
+### Database migrations (REQUIRED BEFORE DEPLOYMENT)
+
+Apply migrations **in order**, using your linked Supabase project and the
+Supabase CLI (or review/run the SQL through the Supabase SQL editor):
+
+```bash
+supabase login
+supabase link --project-ref YOUR_SUPABASE_PROJECT_REF
+supabase db push
+```
+
+You can inspect the SQL in `supabase/migrations/` before applying it:
+
+1. `0001_init.sql` — initial profiles, conversations, turns and scenes (existing).
+2. `0002_voice_token_quotas.sql` — atomic token issuance budgets.
+3. `0003_private_notes.sql` — private notes with user-scoped RLS.
+4. `0004_scene_integrity.sql` — scene/turn referential integrity.
+
+**The Deepgram token endpoint fails closed** (HTTP 503) if
+`claim_voice_token_budget` is not installed. Deploying the new code **before**
+running migration 0002 will prevent new voice sessions from starting.
+
+Token issuance is capped at **12 requests per user per hour** and **240 total
+requests per hour** by default. These are *issuance* limits, not a cost guarantee:
+set a separate **Deepgram budget and spending alert**, and monitor provider
+usage. Anonymous registration does not replace abuse detection or provider-level
+spending controls. Avoid exposing a publicly billed demo without those controls.
+
+### Privacy and retention
+
+- Conversation turns and generated scenes are stored in Supabase with RLS.
+- Notes and conversation history are scoped to the signed-in Supabase user.
+- A user can delete their saved conversations and notes in the interface.
+- An anonymous session is **not a durable account** across browser storage
+  clearing or device changes. For cross-device persistence, configure a
+  permanent sign-in flow before offering it as a user-facing guarantee.
+- Do not place API keys, passwords or payment details in notes.
+- Establish a documented retention policy before handling real customer data.
+
+### Engineering verification
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm audit --omit=dev --audit-level=high
+npm run build
+```
+
+Tests exercise arithmetic tools, opt-in notes, structured scene validation,
+official SDK audio-contract wiring and safe history search. They do not replace live
+microphone testing or browser-based end-to-end verification.
+
+#### Recommended release checks
+
+- Verify anonymous sign-in and the quota RPC work with the **actual**
+  production Supabase configuration.
+- Test start, mute, unmute, typed input, interruption, reconnect, end and
+  restart in Chrome, Firefox, Safari and Android/iOS browsers.
+- Test deliberately revoked microphone permission, offline transitions and
+  token-rate-limit responses.
+- Test note read/write/delete and conversation resumption with **two separate**
+  users to verify isolation.
+- Check Deepgram billing alerts, provider quotas and server error logs.
+- Confirm the UI shows actual provider-reported per-turn latency when available.
+- Record mobile CPU utilization, dropped audio frames and end-to-end response
+  latency under realistic network conditions.
+- Confirm reduced-motion appearance and keyboard-only navigation.
+
+### Known boundaries
+
+NEON is still an experimental agent, not a verified 100% production-grade
+autonomous system. It does not currently have full browser e2e coverage, a
+dedicated observability service, multi-region failover, independent provider
+fallback or human-reviewed integrations with high-risk external services.
+Those should be built and measured before production-level guarantees.

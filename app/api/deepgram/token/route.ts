@@ -24,6 +24,25 @@ export async function POST() {
     );
   }
 
+  // PostgreSQL RPC makes this limit atomic across serverless instances.
+  // Fail closed if the security migration has not been applied.
+  const { data: allowed, error: quotaError } = await supabase.rpc(
+    "claim_voice_token_budget"
+  );
+  if (quotaError) {
+    console.error("Voice token quota check unavailable", quotaError.message);
+    return NextResponse.json(
+      { error: "Voice service is temporarily unavailable" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  if (allowed !== true) {
+    return NextResponse.json(
+      { error: "Voice session limit reached. Try again later." },
+      { status: 429, headers: { "Retry-After": "3600", "Cache-Control": "no-store" } }
+    );
+  }
+
   try {
     const res = await fetch(
       "https://api.deepgram.com/v1/auth/grant",

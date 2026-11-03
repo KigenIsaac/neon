@@ -21,6 +21,8 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let W = 0, H = 0, DPR = 1, cx = 0, cy = 0, R = 0;
     let bgGrad: CanvasGradient, glowGrad: CanvasGradient, glassGrad: CanvasGradient;
+    let lastPaletteType = "";
+    let shadeCache: Array<{ c: string; w: number }> = [];
     let raf: number | null = null;
     let last = 0, animTime = 0, angleY = 0;
     let mx = 0, my = 0, tmx = 0, tmy = 0;
@@ -138,6 +140,29 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
 
     const stars: Array<{ x: number; y: number; z: number; r: number; p: number; sp: number; c: string }> = [];
 
+    const configureGradients = () => {
+      const pal = paletteFrom(typeRef.current);
+      glowGrad = ctx.createRadialGradient(cx, cy, R * 0.4, cx, cy, R * 2.6);
+      glowGrad.addColorStop(0, pal.glow);
+      glowGrad.addColorStop(0.35, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.09)`);
+      glowGrad.addColorStop(1, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0)`);
+
+      glassGrad = ctx.createRadialGradient(cx - R*0.38, cy - R*0.42, R*0.05, cx, cy, R*1.04);
+      glassGrad.addColorStop(0, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
+      glassGrad.addColorStop(0.42, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.045)`);
+      glassGrad.addColorStop(0.82, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0.012)`);
+      glassGrad.addColorStop(1, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
+      shadeCache = Array.from({ length: 16 }, (_, i) => {
+        const t = i / 15;
+        const a = 0.08 + 0.68 * t * t;
+        const r = Math.round(lerp(pal.dark.r, pal.primary.r, t));
+        const g = Math.round(lerp(pal.dark.g, pal.primary.g, t));
+        const b = Math.round(lerp(pal.dark.b, pal.primary.b, t));
+        return { c: `rgba(${r},${g},${b},${a.toFixed(3)})`, w: 0.5 + 1.7 * t };
+      });
+      lastPaletteType = typeRef.current;
+    };
+
     const resize = () => {
       DPR = Math.min(window.devicePixelRatio || 1, 2);
       W = window.innerWidth; H = window.innerHeight;
@@ -151,17 +176,7 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
       bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.75);
       bgGrad.addColorStop(0, "#08101f"); bgGrad.addColorStop(0.45, "#04070f"); bgGrad.addColorStop(1, "#01020a");
 
-      const pal = paletteFrom(typeRef.current);
-      glowGrad = ctx.createRadialGradient(cx, cy, R * 0.4, cx, cy, R * 2.6);
-      glowGrad.addColorStop(0, pal.glow);
-      glowGrad.addColorStop(0.35, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.09)`);
-      glowGrad.addColorStop(1, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0)`);
-
-      glassGrad = ctx.createRadialGradient(cx - R*0.38, cy - R*0.42, R*0.05, cx, cy, R*1.04);
-      glassGrad.addColorStop(0, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
-      glassGrad.addColorStop(0.42, `rgba(${pal.mid.r},${pal.mid.g},${pal.mid.b},0.045)`);
-      glassGrad.addColorStop(0.82, `rgba(${pal.dark.r},${pal.dark.g},${pal.dark.b},0.012)`);
-      glassGrad.addColorStop(1, `rgba(${pal.primary.r},${pal.primary.g},${pal.primary.b},0.10)`);
+      configureGradients();
 
       for (let i = 0; i < SONAR_N; i++) { sonarR[i] = R * 1.02; sonarA[i] = i / SONAR_N; }
 
@@ -292,17 +307,9 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
       edgeList.sort((p, q) => p.z - q.z);
 
       ctx.lineCap = "round";
+      // Palette is rebuilt only when the user/assistant voice state changes.
       for (const e of edgeList) {
-        const pal = paletteFrom(typeRef.current);
-        const SHADES = Array.from({ length: 16 }, (_, i) => {
-          const t = i / 15;
-          const a = 0.08 + 0.68 * t * t;
-          const r = Math.round(lerp(pal.dark.r, pal.primary.r, t));
-          const g = Math.round(lerp(pal.dark.g, pal.primary.g, t));
-          const b = Math.round(lerp(pal.dark.b, pal.primary.b, t));
-          return { c: `rgba(${r},${g},${b},${a.toFixed(3)})`, w: 0.5 + 1.7 * t };
-        });
-        const sh = SHADES[(((e.z + 1) * 0.5 * 15) | 0)];
+        const sh = shadeCache[(((e.z + 1) * 0.5 * 15) | 0)];
         ctx.strokeStyle = sh.c; ctx.lineWidth = sh.w;
         ctx.beginPath();
         ctx.moveTo(PX[e.a], PY[e.a]); ctx.lineTo(PX[e.b], PY[e.b]);
@@ -343,15 +350,18 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
       if (!last) last = now;
       let dt = (now - last) / 1000; last = now;
       if (dt > 0.05) dt = 0.05;
-      const motion = reduce ? 0.22 : 1;
+      const motion = reduce ? 0 : 1;
       const vdt = dt * motion;
       animTime += vdt;
       angleY += vdt * 0.35;
       mx += (tmx - mx) * 0.05;
       my += (tmy - my) * 0.05;
 
-      updateActivity(vdt);
-      updatePackets(vdt);
+      if (!reduce) {
+        updateActivity(vdt);
+        updatePackets(vdt);
+      }
+      if (lastPaletteType !== typeRef.current) configureGradients();
 
       ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
       drawStars(animTime);
@@ -364,7 +374,7 @@ export function NeonOrb({ voiceType, level }: { voiceType?: string; level?: numb
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!W || !H) return;
+      if (!W || !H || reduce) return;
       tmx = (e.clientX / W - 0.5) * 2;
       tmy = (e.clientY / H - 0.5) * 2;
     };
