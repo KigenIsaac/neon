@@ -3,39 +3,44 @@ class MicrophoneProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.targetRate = 24000;
-    this.ratio = sampleRate / this.targetRate;
-    this.phase = 0;
-    this.buffer = new Float32Array(0);
+    this.step = sampleRate / this.targetRate;
+    this.totalInput = 0;
+    this.nextOutput = 0;
+    this.previousSample = 0;
+    this.frame = new Int16Array(480);
+    this.frameCount = 0;
   }
-  appendInput(input) {
-    if (!input || input.length === 0) return;
-    const combined = new Float32Array(this.buffer.length + input.length);
-    combined.set(this.buffer, 0);
-    combined.set(input, this.buffer.length);
-    this.buffer = combined;
-  }
+
   process(inputs) {
     const input = inputs[0]?.[0];
-    if (input && input.length > 0) this.appendInput(input);
-    if (this.buffer.length < 2) return true;
-    const available = this.buffer.length - this.phase;
-    if (available < 2) return true;
-    const outLen = Math.floor((available - 1) / this.ratio) + 1;
-    if (outLen <= 0) return true;
-    const pcm = new Int16Array(outLen);
-    let position = this.phase;
-    for (let i = 0; i < outLen; i++) {
-      const i0 = Math.floor(position), i1 = i0 + 1;
-      const f = position - i0;
-      const s = this.buffer[i0] * (1 - f) + this.buffer[i1] * f;
-      const c = Math.max(-1, Math.min(1, s));
-      pcm[i] = c < 0 ? c * 32768 : c * 32767;
-      position += this.ratio;
+    if (!input || input.length === 0) return true;
+    const start = this.totalInput;
+    const end = start + input.length;
+
+    // Phase-accurate streaming linear resampling; no growing/copying
+    // Float32Array on the audio render thread.
+    while (this.nextOutput < end - 1) {
+      const position = this.nextOutput - start;
+      const index = Math.floor(position);
+      const fraction = position - index;
+      const a = index < 0 ? this.previousSample : input[index];
+      const b = input[index + 1];
+      const value = a * (1 - fraction) + b * fraction;
+      const clipped = Math.max(-1, Math.min(1, value));
+      this.frame[this.frameCount++] = clipped < 0 ? clipped * 32768 : clipped * 32767;
+      this.nextOutput += this.step;
+
+      // Emit 20 ms chunks, reducing port events without adding
+      // excessive microphone latency.
+      if (this.frameCount === this.frame.length) {
+        const output = this.frame;
+        this.frame = new Int16Array(480);
+        this.frameCount = 0;
+        this.port.postMessage({ type: "mic-pcm", buffer: output.buffer }, [output.buffer]);
+      }
     }
-    const consumed = Math.floor(position);
-    this.buffer = this.buffer.slice(consumed);
-    this.phase = position - consumed;
-    this.port.postMessage({ type: "mic-pcm", buffer: pcm.buffer }, [pcm.buffer]);
+    this.previousSample = input[input.length - 1];
+    this.totalInput = end;
     return true;
   }
 }
@@ -57,7 +62,9 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
     this.underrunCooldownFrames = Math.round(sampleRate * 0.25);
     this.port.onmessage = (e) => {
       const d = e.data; if (!d || typeof d.type !== "string") return;
-      if (d.type === "audio") this.appendPCM(d.buffer);
+      if (d.type === "audio") {
+        if (!Number.isFinite(d.generation) || d.generation === this.generation) this.appendPCM(d.buffer);
+      }
       else if (d.type === "server-done") {
         if (Number.isFinite(d.generation) && d.generation !== this.generation) return;
         this.serverDone = true; this.maybeNotifyDrain();
@@ -142,7 +149,12 @@ class AgentPlaybackProcessor extends AudioWorkletProcessor {
       position += this.ratio; produced++;
     }
     const consumed = Math.floor(position);
-    if (consumed > 0) { this.buffer = this.buffer.slice(consumed); position -= consumed; }
+    // Compact only occasionally: slicing on every 128-sample quantum
+    // previously generated avoidable garbage-collector pressure.
+    if (consumed >= 2048 || consumed > this.buffer.length / 2) {
+      this.buffer = this.buffer.slice(consumed);
+      position -= consumed;
+    }
     this.position = position; this.totalPlayedSamples += produced;
     const remaining = this.availableSamples();
     if (produced < ch.length && !this.serverDone && remaining < 1) {
