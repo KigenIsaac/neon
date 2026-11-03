@@ -14,7 +14,7 @@ import { TranscriptDrawer } from "./TranscriptDrawer";
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
-    started, status, transcript, messages, lastLatencyMs, greeting, scene, level, muted,
+    started, status, transcript, messages, lastLatencyMs, storageWarning, greeting, scene, level, muted,
     pendingSaveNote, resolveSaveNote,
     start, shutdown, retry, toggleMute, sendText
   } = useVoiceAssistant(session);
@@ -78,6 +78,12 @@ export function VoiceConsole() {
             Provider latency: {lastLatencyMs.toLocaleString()} ms
           </span>}
           <TranscriptPanel text={transcript} />
+          {storageWarning && (
+            <p className="storage-warning" role="status">
+              Some conversation history could not be saved. You can continue speaking,
+              but recent messages may not appear after this session.
+            </p>
+          )}
           {started && (
             <>
               <form className="text-entry" onSubmit={(event) => {
