@@ -1,6 +1,6 @@
 # 🌌 NEON — Real-Time Voice AI
 
-> **A cinematic real-time voice assistant built with Next.js, Deepgram, Supabase, WebSockets, custom audio processing, and persistent conversational state.**
+> **A cinematic real-time voice assistant built with Next.js, Deepgram, Supabase, WebSockets, Deepgram's official browser SDK, and persistent conversational state.**
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -46,8 +46,8 @@ flowchart LR
     DG --> CE[Conversation Events]
     DG --> VS[visual_scene]
 
-    AR --> PB[Playback Buffer]
-    PB --> SP[Speaker]
+    AR --> PB[Official AgentPlayer]
+    PB --> SP[Browser audio output]
 
     VS --> SC[Scene State]
     SC --> UI[Neon Orb / Visual UI]
@@ -66,16 +66,16 @@ The project is intentionally built around several systems working together.
 
 The browser captures microphone audio and streams it to the conversational agent.
 
-The audio layer handles:
+The **official `@deepgram/agents` SDK** handles:
 
-- Microphone capture
-- `AudioContext`
-- `AudioWorklet`
-- PCM audio
-- Resampling to 24 kHz
-- Streaming
-- Playback buffering
-- Audio telemetry
+- Microphone capture via `AgentMicrophone`, 16 kHz PCM
+- Audio transport and automatic reconnection via `AgentSession`
+- Playback and device-rate conversion via `AgentPlayer`, 24 kHz PCM
+- KeepAlive, session handshakes and barge-in
+- Browser analyser-based volume telemetry
+
+NEON no longer implements its own audio capture/resampler, WebSocket
+reconnect system or speaker playback buffer.
 
 This makes the application fundamentally different from a conventional request/response chatbot.
 
@@ -191,36 +191,25 @@ The server-side routes validate authenticated access before allowing conversatio
 
 ---
 
-## ⚡ Audio Architecture
-
-The audio engine is one of the technically interesting parts of the project.
-
-### Capture and streaming
+## ⚡ Official Deepgram Voice Architecture
 
 ```mermaid
 flowchart LR
-    M[Microphone] --> MS[MediaStream]
-    MS --> AC[AudioContext]
-    AC --> AW[AudioWorklet]
-    AW --> PCM[PCM Processing]
-    PCM --> RS[Resampling]
-    RS --> K[24 kHz Stream]
-    K --> D[Voice Agent]
+    MIC[Browser microphone] --> CAP[Deepgram AgentMicrophone]
+    CAP -->|16 kHz PCM| SESSION[Deepgram AgentSession]
+    SESSION <-->|WebSocket, token refresh, reconnect| DG[Deepgram Voice Agent]
+    SESSION -->|24 kHz PCM| PLAYER[Deepgram AgentPlayer]
+    PLAYER --> DEVICE[Browser/OS-selected speakers]
+    SESSION --> EVENTS[Typed SDK events]
+    EVENTS --> UI[NEON React state, scenes and tools]
 ```
 
-### Playback
+NEON pins `@deepgram/agents@0.2.0` and uses all three of the SDK's
+documented browser primitives. The SDK owns audio transport and playback;
+the app retains the NEON UI, note confirmations and database persistence.
 
-```mermaid
-flowchart LR
-    D[Voice Agent] --> A[Audio Data]
-    A --> B[Playback Buffer]
-    B --> C[AudioContext]
-    C --> S[Speaker]
-```
-
-The application also tracks audio-related telemetry used by the interface.
-
----
+**For details, laptop diagnostics and testing instructions,
+read [Voice Architecture](docs/VOICE_ARCHITECTURE.md).**
 
 ## 🌌 Neon Orb Interface
 
@@ -255,7 +244,7 @@ neon/
 │   └── application/session/voice state
 ├── lib/
 │   ├── AI/agent configuration
-│   ├── audio engine
+│   ├── official SDK audio profile
 │   ├── Supabase integration
 │   └── visual helpers
 ├── supabase/
@@ -284,12 +273,10 @@ neon/
 
 ### Audio
 
-- Web Audio API
-- AudioContext
-- AudioWorklet
-- PCM processing
-- Audio resampling
-- Streaming playback
+- `@deepgram/agents@0.2.0` browser SDK
+- `AgentMicrophone` with echo cancellation and noise suppression
+- `AgentSession` with managed WebSocket, tokens and retries
+- `AgentPlayer` with native PCM playback and interruption
 
 ### Backend / Data
 
@@ -548,8 +535,8 @@ the action succeeded.
 - Use **Transcript** to review and copy the visible conversation history.
 - Use **Saved notes** to review and delete notes.
 - When you ask NEON to remember a note, approve the actual contents on screen.
-- Idle WebSocket sessions send authenticated Deepgram keepalives after the
-  settings handshake to avoid unexpected timeouts while typing or muted.
+- The official Deepgram SDK sends authenticated keepalives and manages socket
+  reconnection, settings handshakes and token refresh.
 - Previous conversation turns are loaded on resume and reconnect. They are
   transmitted to the configured voice AI provider for context.
 - The UI respects reduced-motion preferences and adjusts visual layouts on resize.
@@ -605,7 +592,7 @@ npm run build
 ```
 
 Tests exercise arithmetic tools, opt-in notes, structured scene validation,
-microphone resampling and playback/drain behavior, plus safe history search. They do not replace live
+official SDK audio-contract wiring and safe history search. They do not replace live
 microphone testing or browser-based end-to-end verification.
 
 #### Recommended release checks
