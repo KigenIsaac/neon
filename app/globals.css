@@ -991,3 +991,13 @@ body::after {
 .transcript-history li.user span { color: #ffa07d; }
 .transcript-history li p { line-height: 1.5; overflow-wrap: anywhere; }
 .transcript-dialog footer span { font-size: .8rem; color: #a7d5e8; }
+
+.latency-chip {
+  font-size: .73rem;
+  letter-spacing: .05em;
+  color: #98c8e8;
+  background: rgba(5,20,42,.55);
+  border: 1px solid rgba(95,208,255,.18);
+  border-radius: 999px;
+  padding: .25rem .7rem;
+}
