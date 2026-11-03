@@ -7,7 +7,7 @@ export interface RecentConversation {
 }
 
 export function StartOverlay({
-  visible, disabled, onStart, conversations, onResume, onDelete
+  visible, disabled, onStart, conversations, onResume, onDelete, error, onRetryAuth
 }: {
   visible: boolean;
   disabled: boolean;
@@ -15,6 +15,8 @@ export function StartOverlay({
   conversations: RecentConversation[];
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
+  error?: string;
+  onRetryAuth?: () => void;
 }) {
   return (
     <section id="start-overlay" className={visible ? "" : "hidden"} aria-label="Start NEON">
@@ -22,6 +24,12 @@ export function StartOverlay({
       <button className="wake-button" type="button" disabled={disabled} onClick={onStart}>
         {disabled ? "Preparing your voice interface..." : "Wake the orb and begin"}
       </button>
+      {error && (
+        <div className="auth-error" role="alert">
+          <p>{error}</p>
+          {onRetryAuth && <button type="button" onClick={onRetryAuth}>Retry sign-in</button>}
+        </div>
+      )}
       {conversations.length > 0 && (
         <div className="recent-sessions">
           <h2>Continue a conversation</h2>
