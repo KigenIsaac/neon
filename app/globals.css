@@ -878,3 +878,51 @@ body::after {
 }
 .notes-dialog button:hover { background: rgba(50,110,172,.6); }
 .notes-dialog button:focus-visible { outline: 2px solid #8ce3ff; outline-offset: 2px; }
+
+.note-confirm-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(92vw, 500px);
+  max-height: 85dvh;
+  overflow-y: auto;
+  background: #071729;
+  border: 1px solid rgba(95,208,255,.45);
+  border-radius: 20px;
+  box-shadow: 0 24px 90px rgba(0,0,0,.8);
+  color: #e8f7ff;
+  padding: 1.4rem;
+  user-select: text;
+  touch-action: pan-y;
+}
+.note-confirm-dialog::backdrop {
+  background: rgba(0, 4, 12, .86);
+  backdrop-filter: blur(8px);
+}
+.note-confirm-dialog h2 { font-size: 1.2rem; font-weight: 650; margin-bottom: .7rem; }
+.note-confirm-dialog p { font-size: .9rem; line-height: 1.5; color: #b8d4ed; }
+.note-confirm-dialog blockquote {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-left: 3px solid #5fd0ff;
+  border-radius: 5px;
+  background: rgba(45,95,145,.24);
+  overflow-wrap: anywhere;
+  max-height: 30dvh;
+  overflow: auto;
+}
+.note-confirm-help { margin-bottom: 1.2rem; }
+.note-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .6rem; }
+.note-confirm-actions button {
+  color: #eaf7ff;
+  font: inherit;
+  cursor: pointer;
+  min-height: 42px;
+  border-radius: 10px;
+  padding: .6rem 1rem;
+  border: 1px solid rgba(95,208,255,.3);
+  background: rgba(30,65,105,.6);
+  touch-action: manipulation;
+}
+.note-confirm-actions button.confirm-primary { background: #2d7895; border-color: #6fe2ff; }
+.note-confirm-actions button:focus-visible { outline: 2px solid #b2ebff; outline-offset: 2px; }
