@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 export interface RecentConversation {
   id: string;
@@ -35,9 +36,9 @@ export function StartOverlay({
           {onRetryAuth && <button type="button" onClick={onRetryAuth}>Retry sign-in</button>}
         </div>
       )}
-      <a className="privacy-link" href="/privacy" target="_blank" rel="noopener noreferrer">
+      <Link className="privacy-link" href="/privacy" target="_blank" rel="noopener noreferrer">
         How NEON handles your microphone and data
-      </a>
+      </Link>
       {conversations.length > 0 && (
         <div className="recent-sessions">
           <h2>Continue a conversation</h2>
