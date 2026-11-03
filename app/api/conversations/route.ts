@@ -36,3 +36,22 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: data.id });
 }
+
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data, error } = await supabase.from("conversations")
+    .select("id,title,started_at")
+    .eq("user_id", user.id)
+    .order("started_at", { ascending: false })
+    .limit(10);
+  if (error) {
+    console.error("history list failed", error.message);
+    return NextResponse.json({ error: "Unable to load conversations" }, { status: 500 });
+  }
+  return NextResponse.json({ conversations: data ?? [] }, {
+    headers: { "Cache-Control": "no-store" }
+  });
+}
