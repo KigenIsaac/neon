@@ -69,6 +69,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
   const engineRef = useRef<AudioEngine | null>(null);
   const [level, setLevel] = useState(0);
+  const lastLevelUpdateRef = useRef(0);
   const [muted, setMuted] = useState(false);
   const [pendingSaveNote, setPendingSaveNote] = useState<string | null>(null);
   const saveDecisionRef = useRef<((approved: boolean) => void) | null>(null);
@@ -569,7 +570,13 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         try { ws.send(buf); } catch {}
       },
       onInputLevel: (lvl) => {
-        setLevel(lvl ?? 0);
+        // Keep the 20 ms audio streaming cadence without forcing 50 full
+        // React render passes per second for the visual level indicator.
+        const now = performance.now();
+        if (now - lastLevelUpdateRef.current >= 50) {
+          lastLevelUpdateRef.current = now;
+          setLevel(lvl ?? 0);
+        }
       },
       onSpeakingChange: (speaking) => {
         if (speaking) holdScene();
