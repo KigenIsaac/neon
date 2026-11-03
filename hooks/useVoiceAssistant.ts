@@ -78,6 +78,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const shuttingDownRef = useRef(false);
   const startingRef = useRef(false);
   const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
+  const connectInFlightRef = useRef(false);
+  const handshakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sceneKey = useCallback((s: Scene) => {
     return JSON.stringify(s);
@@ -185,6 +187,10 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         break;
       }
       case "SettingsApplied":
+        if (handshakeTimeoutRef.current) {
+          clearTimeout(handshakeTimeoutRef.current);
+          handshakeTimeoutRef.current = null;
+        }
         if (!mutedRef.current) {
           void engineRef.current?.startMicrophone();
           listeningRef.current = true;
@@ -298,13 +304,14 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   }, [illustrate, persistScene, persistTurn, respondToFunction]);
 
   const connectAgent = useCallback(async () => {
-    if (shuttingDownRef.current) return;
+    if (shuttingDownRef.current || connectInFlightRef.current) return;
     if (
       wsRef.current &&
       (wsRef.current.readyState === WebSocket.OPEN ||
         wsRef.current.readyState === WebSocket.CONNECTING)
     ) return;
 
+    connectInFlightRef.current = true;
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
 
@@ -328,6 +335,11 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       }
     }
 
+    if (shuttingDownRef.current) {
+      connectInFlightRef.current = false;
+      return;
+    }
+
     let token: string;
     try {
       const res = await fetch("/api/deepgram/token", { method: "POST" });
@@ -342,20 +354,43 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       token = payload.access_token;
     } catch (err) {
       console.error("token fetch failed", err);
+      connectInFlightRef.current = false;
+      if (shuttingDownRef.current) return;
       setStatus({ mode: "error", text: err instanceof Error ? err.message : "Voice connection failed" });
       return;
     }
 
-    const ws = new WebSocket(AGENT_CONFIG.DEEPGRAM_AGENT_URL, ["bearer", token]);
+    if (shuttingDownRef.current) {
+      connectInFlightRef.current = false;
+      return;
+    }
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(AGENT_CONFIG.DEEPGRAM_AGENT_URL, ["bearer", token]);
+    } catch (error) {
+      connectInFlightRef.current = false;
+      console.error("Unable to open voice socket", error);
+      setStatus({ mode: "error", text: "Unable to connect. Select Retry." });
+      return;
+    }
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
+    connectInFlightRef.current = false;
 
     ws.onopen = () => {
       if (wsRef.current !== ws || shuttingDownRef.current) return;
       reconnectAttemptsRef.current = 0;
+      // Prevent an apparently connected socket from hanging forever
+      // when the agent fails to acknowledge the settings handshake.
+      if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
+      handshakeTimeoutRef.current = setTimeout(() => {
+        if (wsRef.current === ws && !shuttingDownRef.current) ws.close();
+      }, 15000);
     };
 
     ws.onmessage = async (event) => {
+      if (wsRef.current !== ws || shuttingDownRef.current) return;
       if (typeof event.data !== "string") {
         const buf = event.data instanceof ArrayBuffer
           ? event.data
@@ -379,6 +414,12 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
     ws.onclose = () => {
       if (wsRef.current !== ws) return;
+      if (handshakeTimeoutRef.current) {
+        clearTimeout(handshakeTimeoutRef.current);
+        handshakeTimeoutRef.current = null;
+      }
+      for (const controller of pendingCallsRef.current.values()) controller.abort();
+      pendingCallsRef.current.clear();
       listeningRef.current = false;
       engineRef.current?.stopMicrophone();
       engineRef.current?.stopPlayback();
@@ -487,6 +528,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const shutdown = useCallback(() => {
     shuttingDownRef.current = true;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
     if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
     for (const controller of pendingCallsRef.current.values()) controller.abort();
     pendingCallsRef.current.clear();
