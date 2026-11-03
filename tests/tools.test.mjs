@@ -54,3 +54,29 @@ test("tool calculator returns a JSON result", async () => {
   });
   assert.deepEqual(JSON.parse(raw), { result: 3 });
 });
+
+test("history search requires bounded text and never searches other users", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({
+      matches: [{ conversation_id: "own", role: "user", content: "We discussed model training" }]
+    });
+  };
+  try {
+    await assert.rejects(
+      runAgentTool("search_history", { query: "x" }, { confirmSave: () => false }),
+      /between 2 and 120/
+    );
+    const result = await runAgentTool("search_history", { query: "model training" }, {
+      confirmSave: () => false
+    });
+    assert.equal(JSON.parse(result).matches.length, 1);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "/api/history/search?q=model%20training");
+    assert.equal(calls[0].options.cache, "no-store");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
