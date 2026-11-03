@@ -7,6 +7,7 @@ import { StartOverlay, type RecentConversation } from "./StartOverlay";
 import { StatusBar } from "./StatusBar";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { SceneStage } from "./SceneStage";
+import { NotesPanel } from "./NotesPanel";
 
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
@@ -17,6 +18,7 @@ export function VoiceConsole() {
   const [message, setMessage] = useState("");
   const [sendError, setSendError] = useState("");
   const [recent, setRecent] = useState<RecentConversation[]>([]);
+  const [showNotes, setShowNotes] = useState(false);
   const ready = !loading && !!session;
 
   useEffect(() => {
@@ -60,6 +62,7 @@ export function VoiceConsole() {
         onRetryAuth={authError ? retryAuth : undefined}
       />
       <SceneStage scene={scene} />
+      {started && showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
       <main className="ui-overlay">
         <div id="greeting" className={greeting ? "show" : ""}>{greeting}</div>
         <div className="status-container">
@@ -88,6 +91,7 @@ export function VoiceConsole() {
               </form>
               {sendError && <p className="input-error" role="alert">{sendError}</p>}
               <div className="voice-actions" role="group" aria-label="Voice session controls">
+                <button type="button" onClick={() => setShowNotes(true)}>Saved notes</button>
                 <button type="button" onClick={() => { void toggleMute(); }}
                   aria-pressed={muted}>
                   {muted ? "Unmute mic" : "Mute mic"}
