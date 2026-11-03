@@ -4,7 +4,7 @@
   --panel-bg: rgba(3, 8, 22, .72);
   --panel-border: rgba(90, 180, 255, .16);
   --stage-reserve-top: 118px;
-  --stage-reserve-bottom: 200px;
+  --stage-reserve-bottom: 265px;
 }
 
 *,
@@ -568,7 +568,7 @@ body::after {
 @media (max-width: 600px) {
   :root {
     --stage-reserve-top: 96px;
-    --stage-reserve-bottom: 156px;
+    --stage-reserve-bottom: 235px;
   }
 
   #greeting {
@@ -636,4 +636,79 @@ body::after {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+/* Session controls keep the voice-first presentation usable when audio fails. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
+}
+.text-entry {
+  display: flex;
+  align-items: center;
+  width: min(100%, 620px);
+  min-height: 43px;
+  border-radius: 999px;
+  border: 1px solid rgba(95, 208, 255, .26);
+  background: rgba(4, 13, 30, .90);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  pointer-events: auto;
+}
+.text-entry input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  padding: .75rem 1.05rem;
+  background: transparent;
+  color: #eaf7ff;
+  font-size: 15px;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: manipulation;
+}
+.text-entry input::placeholder { color: #8da9c9; }
+.text-entry:focus-within { border-color: #5fd0ff; box-shadow: 0 0 0 2px rgba(95,208,255,.15); }
+.text-entry button,
+.voice-actions button {
+  cursor: pointer;
+  border: 1px solid rgba(95, 208, 255, .28);
+  background: rgba(24, 58, 99, .72);
+  color: #e2f5ff;
+  font: inherit;
+  font-size: .85rem;
+  border-radius: 999px;
+  padding: .65rem 1rem;
+  min-height: 42px;
+  transition: background .2s, border-color .2s;
+  touch-action: manipulation;
+}
+.text-entry button { margin: 2px; }
+.text-entry button:disabled { cursor: not-allowed; opacity: .42; }
+.text-entry button:not(:disabled):hover,
+.voice-actions button:hover { background: rgba(50, 104, 155, .78); }
+.text-entry button:focus-visible,
+.voice-actions button:focus-visible { outline: 2px solid #8ce3ff; outline-offset: 2px; }
+.voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .5rem;
+  pointer-events: auto;
+}
+.voice-actions button[aria-pressed="true"] {
+  border-color: rgba(255, 135, 166, .70);
+  background: rgba(100, 30, 65, .80);
+}
+.input-error { font-size: .83rem; color: #ffb7c2; }
+@media (max-width: 600px) {
+  .status-container {
+    bottom: max(.75rem, env(safe-area-inset-bottom));
+    gap: .48rem;
+  }
+  .voice-actions button { font-size: .78rem; padding: .45rem .75rem; }
 }
