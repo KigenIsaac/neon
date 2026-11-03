@@ -33,6 +33,39 @@ export function buildSettings() {
         prompt: LLM_PROMPT,
         functions: [
           {
+            name: "get_current_time",
+            description: "Call to read the current time and user's local time zone. Do not guess the time.",
+            parameters: { type: "object", properties: {}, additionalProperties: false }
+          },
+          {
+            name: "calculate",
+            description: "Call to accurately compute arithmetic expressions. Supports +, -, *, /, %, and parentheses; do not guess calculations.",
+            parameters: {
+              type: "object", additionalProperties: false,
+              properties: { expression: { type: "string", description: "Arithmetic expression, no words" } },
+              required: ["expression"]
+            }
+          },
+          {
+            name: "find_notes",
+            description: "Call to search for a note the user previously asked you to save. Search is private to the authenticated user.",
+            parameters: {
+              type: "object", additionalProperties: false,
+              properties: { query: { type: "string", description: "Search phrase; empty for recent notes" } },
+              required: ["query"]
+            }
+          },
+          {
+            name: "save_note",
+            description: "Call only if the user explicitly asks you to remember or save a note. Always requires an on-screen confirmation. Never save passwords or access tokens.",
+            defer_until_eot: true,
+            parameters: {
+              type: "object", additionalProperties: false,
+              properties: { content: { type: "string", description: "Note to remember, up to 600 characters" } },
+              required: ["content"]
+            }
+          },
+          {
             name: "visual_scene",
             description:
               "Render a visual illustration on the user's screen while you speak. " +
