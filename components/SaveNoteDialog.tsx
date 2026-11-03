@@ -29,7 +29,7 @@ export function SaveNoteDialog({
       <blockquote>{note}</blockquote>
       <p className="note-confirm-help">You can delete this note later. Do not store secrets or passwords.</p>
       <div className="note-confirm-actions">
-        <button type="button" onClick={() => onDecision(false)}>Don't save</button>
+        <button type="button" onClick={() => onDecision(false)}>Cancel</button>
         <button type="button" className="confirm-primary" onClick={() => onDecision(true)}>Save note</button>
       </div>
     </dialog>
