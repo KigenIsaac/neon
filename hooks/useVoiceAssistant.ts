@@ -89,6 +89,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const startingRef = useRef(false);
   const connectAgentRef = useRef<(() => Promise<void>) | null>(null);
   const connectInFlightRef = useRef(false);
+  const connectionEpochRef = useRef(0);
   const handshakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const agentReadyRef = useRef(false);
@@ -359,6 +360,9 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     ) return;
 
     connectInFlightRef.current = true;
+    const epoch = ++connectionEpochRef.current;
+    const isCurrent = () =>
+      !shuttingDownRef.current && epoch === connectionEpochRef.current;
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
     agentReadyRef.current = false;
@@ -384,10 +388,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       }
     }
 
-    if (shuttingDownRef.current) {
-      connectInFlightRef.current = false;
-      return;
-    }
+    if (!isCurrent()) return;
 
     let token: string;
     try {
@@ -403,21 +404,19 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       token = payload.access_token;
     } catch (err) {
       console.error("token fetch failed", err);
+      if (!isCurrent()) return;
       connectInFlightRef.current = false;
-      if (shuttingDownRef.current) return;
       setStatus({ mode: "error", text: err instanceof Error ? err.message : "Voice connection failed" });
       return;
     }
 
-    if (shuttingDownRef.current) {
-      connectInFlightRef.current = false;
-      return;
-    }
+    if (!isCurrent()) return;
 
     let ws: WebSocket;
     try {
       ws = new WebSocket(AGENT_CONFIG.DEEPGRAM_AGENT_URL, ["bearer", token]);
     } catch (error) {
+      if (!isCurrent()) return;
       connectInFlightRef.current = false;
       console.error("Unable to open voice socket", error);
       setStatus({ mode: "error", text: "Unable to connect. Select Retry." });
@@ -438,7 +437,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     }, 5000);
 
     ws.onopen = () => {
-      if (wsRef.current !== ws || shuttingDownRef.current) return;
+      if (wsRef.current !== ws || !isCurrent()) return;
       // Prevent an apparently connected socket from hanging forever
       // when the agent fails to acknowledge the settings handshake.
       if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
@@ -448,7 +447,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
 
     ws.onmessage = async (event) => {
-      if (wsRef.current !== ws || shuttingDownRef.current) return;
+      if (wsRef.current !== ws || !isCurrent()) return;
       if (typeof event.data !== "string") {
         const buf = event.data instanceof ArrayBuffer
           ? event.data
@@ -473,7 +472,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     ws.onerror = (err) => console.error("ws error", err);
 
     ws.onclose = () => {
-      if (wsRef.current !== ws) return;
+      if (wsRef.current !== ws || !isCurrent()) return;
       agentReadyRef.current = false;
       if (heartbeatRef.current) {
         clearInterval(heartbeatRef.current);
@@ -597,6 +596,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
   const shutdown = useCallback(() => {
     shuttingDownRef.current = true;
+    connectionEpochRef.current++;
+    connectInFlightRef.current = false;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
@@ -626,6 +627,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (handshakeTimeoutRef.current) clearTimeout(handshakeTimeoutRef.current);
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    connectionEpochRef.current++;
+    connectInFlightRef.current = false;
     const oldSocket = wsRef.current;
     if (oldSocket) {
       wsRef.current = null;
