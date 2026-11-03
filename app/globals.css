@@ -1107,3 +1107,23 @@ body::after {
 .audio-health-advice { margin: .55rem 0; color: #d9e8f7; }
 .audio-health-privacy { margin-top: .5rem; font-size: .72rem; color: #9db6ca; }
 .audio-health-heading button:focus-visible { outline: 2px solid #aff1ff; outline-offset: 2px; }
+
+.audio-mic-select {
+  display: grid;
+  gap: .35rem;
+  margin-top: .7rem;
+  color: #a8dfff;
+  font-weight: 600;
+}
+.audio-mic-select select {
+  width: 100%;
+  min-height: 40px;
+  padding: .55rem .65rem;
+  background: #0b2745;
+  color: #f5fbff;
+  border: 1px solid rgba(140, 206, 255, .5);
+  border-radius: 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.audio-mic-select select:focus-visible { outline: 2px solid #a4efff; outline-offset: 2px; }
