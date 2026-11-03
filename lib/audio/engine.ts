@@ -21,6 +21,7 @@ export class AudioEngine {
   private mediaStream: MediaStream | null = null;
   private micRequest: Promise<void> | null = null;
   private microphoneEpoch = 0;
+  private preferredMicDeviceId: string | null = null;
 
 
   constructor(private cb: AudioEngineCallbacks = {}) {}
@@ -66,7 +67,10 @@ export class AudioEngine {
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true
+        autoGainControl: true,
+        ...(this.preferredMicDeviceId
+          ? { deviceId: { exact: this.preferredMicDeviceId } }
+          : {})
       },
       video: false
     }).then((stream) => {
@@ -124,6 +128,13 @@ export class AudioEngine {
     this.micSource.connect(this.micWorklet);
     this.micWorklet.connect(this.micOutputSink);
     this.micOutputSink.connect(this.audioCtx.destination);
+  }
+
+  async switchMicrophone(deviceId: string | null) {
+    this.stopMicrophone();
+    this.preferredMicDeviceId = deviceId;
+    await this.enableMicrophone();
+    await this.startMicrophone();
   }
 
   stopMicrophone() {
