@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioEngine } from "@/lib/audio/engine";
-import { AGENT_CONFIG, buildSettings } from "@/lib/agent/settings";
+import { AGENT_CONFIG, buildSettings, type HistoryTurn } from "@/lib/agent/settings";
 import { inferScene } from "@/lib/visuals/heuristics";
 import { runAgentTool } from "@/lib/agent/tools";
 import type { Scene, StatusMode } from "@/types";
@@ -53,7 +53,7 @@ export interface UseVoiceAssistantResult {
   scene: Scene | null;
   level: number;
   muted: boolean;
-  start: () => Promise<void>;
+  start: (conversationId?: string) => Promise<void>;
   shutdown: () => void;
   retry: () => Promise<void>;
   toggleMute: () => Promise<void>;
@@ -76,6 +76,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const settingsSentRef = useRef(false);
   const listeningRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
+  const recentHistoryRef = useRef<HistoryTurn[]>([]);
   const sceneFromToolRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,7 +190,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       case "Welcome": {
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN && !settingsSentRef.current) {
-          ws.send(JSON.stringify(buildSettings()));
+          ws.send(JSON.stringify(buildSettings(recentHistoryRef.current)));
           settingsSentRef.current = true;
         }
         break;
@@ -318,6 +319,26 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
 
+    // Use authenticated, user-scoped saved turns to survive a socket reconnect.
+    // Only user/assistant text becomes conversational context, never system prompts.
+    const id = conversationIdRef.current;
+    if (id) {
+      try {
+        const historyRes = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
+        if (historyRes.ok) {
+          const data = await historyRes.json() as { turns?: Array<{role: string; content: string}> };
+          recentHistoryRef.current = (data.turns ?? [])
+            .filter((turn): turn is HistoryTurn =>
+              (turn.role === "user" || turn.role === "assistant") &&
+              typeof turn.content === "string"
+            )
+            .slice(-24);
+        }
+      } catch (error) {
+        console.warn("conversation context unavailable", error);
+      }
+    }
+
     let token: string;
     try {
       const res = await fetch("/api/deepgram/token", { method: "POST" });
@@ -399,7 +420,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [connectAgent]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (existingConversationId?: string) => {
     if (started || startingRef.current) return;
     if (!session) return;
 
@@ -408,20 +429,33 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     mutedRef.current = false;
     setMuted(false);
     reconnectAttemptsRef.current = 0;
+    conversationIdRef.current = null;
+    recentHistoryRef.current = [];
     try {
-      const res = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Voice session" })
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { id?: unknown };
-        if (typeof data.id === "string") {
-          conversationIdRef.current = data.id;
-        }
+      if (existingConversationId) {
+        const res = await fetch(`/api/conversations/${encodeURIComponent(existingConversationId)}`, {
+          cache: "no-store"
+        });
+        if (!res.ok) throw new Error("Unable to resume that conversation");
+        conversationIdRef.current = existingConversationId;
+      } else {
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Voice session" })
+        });
+        if (!res.ok) throw new Error("Unable to create conversation");
+        const data = await res.json() as { id?: unknown };
+        if (typeof data.id !== "string") throw new Error("Invalid conversation ID");
+        conversationIdRef.current = data.id;
       }
-    } catch (err) {
-      console.warn("conversation create failed", err);
+    } catch (error) {
+      startingRef.current = false;
+      setStatus({
+        mode: "error",
+        text: error instanceof Error ? error.message : "History service unavailable"
+      });
+      return;
     }
 
     const engine = new AudioEngine({
