@@ -15,7 +15,7 @@ import { AudioHealthPanel } from "./AudioHealthPanel";
 export function VoiceConsole() {
   const { session, loading, error: authError, retry: retryAuth } = useSession();
   const {
-    started, status, transcript, messages, lastLatencyMs, audioDiagnostics, microphoneDevice, speechInterruptions, storageWarning, greeting, scene, level, muted,
+    started, status, transcript, messages, lastLatencyMs, audioDiagnostics, microphoneDevice, audioInputDevices, selectedMicId, selectMicrophone, speechInterruptions, storageWarning, greeting, scene, level, muted,
     pendingSaveNote, resolveSaveNote,
     start, shutdown, retry, toggleMute, sendText
   } = useVoiceAssistant(session);
@@ -89,6 +89,8 @@ export function VoiceConsole() {
           {started && showAudioHealth && (
             <AudioHealthPanel
               diagnostics={audioDiagnostics} microphoneDevice={microphoneDevice}
+              audioInputDevices={audioInputDevices} selectedMicId={selectedMicId}
+              onSelectMic={(id) => { void selectMicrophone(id); }}
               speechInterruptions={speechInterruptions}
               onClose={() => setShowAudioHealth(false)}
             />
