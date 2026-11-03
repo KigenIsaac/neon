@@ -323,10 +323,28 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       }
       diagnostics();
     };
+    let drainRemainingPrevious = Infinity;
+    let drainLastProgressAt = performance.now();
     const checkDrain = () => {
       if (!current(sdk)) return;
       const remaining = player.getRemainingPlaybackTime();
       if (remaining > 0.025) {
+        // If the browser's audio clock remains suspended, remaining playback
+        // time never decreases. Detect the stall instead of polling forever.
+        if (remaining < drainRemainingPrevious - 0.006) {
+          drainLastProgressAt = performance.now();
+        } else if (performance.now() - drainLastProgressAt > 2500) {
+          playbackDrainRef.current = null;
+          setStatus({
+            mode: "error",
+            text: "Audio output was suspended by the browser. Select Retry to unlock sound."
+          });
+          console.warn("Deepgram AgentPlayer stalled", {
+            remainingPlaybackSeconds: remaining
+          });
+          return;
+        }
+        drainRemainingPrevious = remaining;
         playbackDrainRef.current = setTimeout(checkDrain, Math.min(300, Math.max(25, remaining * 500)));
       } else {
         playbackDrainRef.current = null;
@@ -615,6 +633,16 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     }
     cleanupAgent();
     shuttingDownRef.current = false;
+    // This callback runs directly on the user's Retry click. Re-unlock Web
+    // Audio BEFORE the first await instead of creating a context too late.
+    try {
+      const player = new AgentPlayer({ sampleRate: DEEPGRAM_OUTPUT_RATE });
+      player.setVolume(0.95);
+      player.queue(new Int16Array(240).buffer);
+      playerRef.current = player;
+    } catch (error) {
+      console.warn("Could not unlock output on Retry gesture", error);
+    }
     // A manual retry creates a new SDK session and refreshes DB-backed context.
     await connectAgent();
   }, [cleanupAgent, connectAgent, start, started]);
