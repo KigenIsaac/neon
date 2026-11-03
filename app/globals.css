@@ -1017,3 +1017,15 @@ body::after {
 #start-overlay .start-text-button:hover { color: #fff; }
 #start-overlay .start-text-button:focus-visible { outline: 2px solid #8ce3ff; outline-offset: 3px; }
 #start-overlay .start-text-button:disabled { opacity: .5; cursor: not-allowed; }
+
+.storage-warning {
+  width: min(100%, 620px);
+  padding: .55rem .85rem;
+  font-size: .75rem;
+  line-height: 1.4;
+  color: #ffdfb3;
+  text-align: center;
+  border: 1px solid rgba(255,191,115,.35);
+  border-radius: 10px;
+  background: rgba(88,48,16,.55);
+}
