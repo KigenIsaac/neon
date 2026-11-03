@@ -13,6 +13,7 @@ export class AudioEngine {
   private workletUrl: string | null = null;
   private playbackWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
+  private micOutputSink: GainNode | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
   private micRequest: Promise<void> | null = null;
@@ -32,8 +33,14 @@ export class AudioEngine {
 
     if (!this.workletUrl) {
       const blob = new Blob([AUDIO_WORKLET_CODE], { type: "application/javascript" });
-      this.workletUrl = URL.createObjectURL(blob);
-      await this.audioCtx.audioWorklet.addModule(this.workletUrl);
+      const url = URL.createObjectURL(blob);
+      try {
+        await this.audioCtx.audioWorklet.addModule(url);
+        this.workletUrl = url;
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        throw error;
+      }
     }
 
     if (!this.playbackWorklet) {
@@ -82,7 +89,10 @@ export class AudioEngine {
     this.micSource = this.audioCtx.createMediaStreamSource(this.mediaStream);
     this.micWorklet = new AudioWorkletNode(this.audioCtx, "microphone-processor", {
       numberOfInputs: 1,
-      numberOfOutputs: 0,
+      // A connected silent output guarantees the microphone worklet stays
+      // on the active audio graph on browsers that cull unconnected nodes.
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
       channelCount: 1,
       channelCountMode: "explicit",
       channelInterpretation: "speakers"
@@ -106,7 +116,11 @@ export class AudioEngine {
       }
       this.cb.onMicChunk?.(d.buffer as ArrayBuffer);
     };
+    this.micOutputSink = this.audioCtx.createGain();
+    this.micOutputSink.gain.value = 0;
     this.micSource.connect(this.micWorklet);
+    this.micWorklet.connect(this.micOutputSink);
+    this.micOutputSink.connect(this.audioCtx.destination);
   }
 
   stopMicrophone() {
@@ -120,6 +134,10 @@ export class AudioEngine {
     if (this.micSource) {
       try { this.micSource.disconnect(); } catch {}
       this.micSource = null;
+    }
+    if (this.micOutputSink) {
+      try { this.micOutputSink.disconnect(); } catch {}
+      this.micOutputSink = null;
     }
     // Disconnecting an AudioWorklet alone does not turn off the user's
     // hardware microphone. Stop media tracks as well, including on mute.
@@ -135,7 +153,9 @@ export class AudioEngine {
     if (!this.playbackWorklet || ab.byteLength < 2) return;
     const usable = ab.byteLength - (ab.byteLength % 2);
     if (usable <= 0) return;
-    const buf = ab.slice(0, usable);
+    // WebSocket binary frames are already owned ArrayBuffers: transfer them
+    // to the worklet instead of copying on every incoming TTS packet.
+    const buf = usable === ab.byteLength ? ab : ab.slice(0, usable);
     try {
       this.playbackWorklet.port.postMessage(
         { type: "audio", generation: this.playbackGeneration, buffer: buf },
