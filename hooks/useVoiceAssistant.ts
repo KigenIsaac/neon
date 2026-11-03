@@ -44,6 +44,7 @@ export interface UseVoiceAssistantResult {
   transcript: string;
   messages: HistoryTurn[];
   lastLatencyMs: number | null;
+  storageWarning: boolean;
   greeting: string;
   scene: Scene | null;
   level: number;
@@ -63,6 +64,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [transcript, setTranscript] = useState("");
   const [messages, setMessages] = useState<HistoryTurn[]>([]);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [storageWarning, setStorageWarning] = useState(false);
   const [greeting, setGreeting] = useState("");
   const [scene, setScene] = useState<Scene | null>(null);
   const sceneRef = useRef<Scene | null>(null);
@@ -174,13 +176,15 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     const id = conversationIdRef.current;
     if (!id) return;
     try {
-      await fetch(`/api/conversations/${id}/turns`, {
+      const result = await fetch(`/api/conversations/${id}/turns`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role, content })
       });
+      if (!result.ok) throw new Error(`Turn storage returned HTTP ${result.status}`);
     } catch (err) {
       console.warn("turn persist failed", err);
+      setStorageWarning(true);
     }
   }, []);
 
@@ -188,13 +192,15 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     const id = conversationIdRef.current;
     if (!id) return;
     try {
-      await fetch(`/api/conversations/${id}/scenes`, {
+      const result = await fetch(`/api/conversations/${id}/scenes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scene: next })
       });
+      if (!result.ok) throw new Error(`Scene storage returned HTTP ${result.status}`);
     } catch (err) {
       console.warn("scene persist failed", err);
+      setStorageWarning(true);
     }
   }, []);
 
@@ -535,6 +541,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     recentHistoryRef.current = [];
     setMessages([]);
     setLastLatencyMs(null);
+    setStorageWarning(false);
     try {
       if (existingConversationId) {
         const res = await fetch(`/api/conversations/${encodeURIComponent(existingConversationId)}`, {
@@ -710,5 +717,5 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [shutdown]);
 
-  return { started, status, transcript, messages, lastLatencyMs, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
+  return { started, status, transcript, messages, lastLatencyMs, storageWarning, greeting, scene, level, muted, pendingSaveNote, resolveSaveNote, start, shutdown, retry, toggleMute, sendText };
 }
