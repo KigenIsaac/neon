@@ -7,11 +7,12 @@ export interface RecentConversation {
 }
 
 export function StartOverlay({
-  visible, disabled, onStart, conversations, onResume, onDelete, error, onRetryAuth
+  visible, disabled, onStart, onStartText, conversations, onResume, onDelete, error, onRetryAuth
 }: {
   visible: boolean;
   disabled: boolean;
   onStart: () => void;
+  onStartText: () => void;
   conversations: RecentConversation[];
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
@@ -23,6 +24,10 @@ export function StartOverlay({
       <h1>NEON</h1>
       <button className="wake-button" type="button" disabled={disabled} onClick={onStart}>
         {disabled ? "Preparing your voice interface..." : "Wake the orb and begin"}
+      </button>
+      <button className="start-text-button" type="button"
+        disabled={disabled} onClick={onStartText}>
+        Start with keyboard — no microphone needed
       </button>
       {error && (
         <div className="auth-error" role="alert">
