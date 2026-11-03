@@ -796,3 +796,31 @@ body::after {
 @media (max-height: 540px) {
   #start-overlay { justify-content: flex-start; }
 }
+
+#start-overlay .auth-error {
+  padding: .85rem 1rem;
+  width: min(92vw, 460px);
+  border-radius: 12px;
+  border: 1px solid rgba(255,130,155,.45);
+  background: rgba(80,25,45,.62);
+  color: #ffe5ea;
+}
+#start-overlay .auth-error p {
+  animation: none;
+  padding: 0;
+  margin-bottom: .6rem;
+  border: 0;
+  font-size: .88rem;
+  letter-spacing: normal;
+  color: inherit;
+}
+.auth-error button {
+  padding: .5rem .9rem;
+  border-radius: 999px;
+  border: 1px solid #ffc0d0;
+  background: #532438;
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.auth-error button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
