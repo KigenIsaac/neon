@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@/types";
 import { LLM_PROMPT } from "./prompt";
+import { DEFAULT_LOCALE, LOCALE_PROFILES, parseVoiceLocale, type VoiceLocale } from "./localisation";
 
 export const AGENT_CONFIG: AgentConfig = {
   DEEPGRAM_AGENT_URL: "wss://agent.deepgram.com/v1/agent/converse",
@@ -12,7 +13,8 @@ export const AGENT_CONFIG: AgentConfig = {
   GREETING: "Hello BOSS! I am your NEON assistant. How can I help you today?"
 };
 
-export function buildSettings() {
+export function buildSettings(locale: VoiceLocale = DEFAULT_LOCALE) {
+  const profile = LOCALE_PROFILES[parseVoiceLocale(locale)];
   return {
     type: "Settings",
     audio: {
@@ -24,13 +26,18 @@ export function buildSettings() {
       }
     },
     agent: {
-      language: "en",
       listen: {
-        provider: { type: "deepgram", model: AGENT_CONFIG.STT_MODEL, smart_format: false }
+        provider: {
+          type: "deepgram",
+          model: AGENT_CONFIG.STT_MODEL,
+          language: profile.sttLanguage,
+          smart_format: locale !== "international",
+          ...(profile.keyterms.length ? { keyterms: [...profile.keyterms] } : {})
+        }
       },
       think: {
         provider: { type: AGENT_CONFIG.LLM_PROVIDER, model: AGENT_CONFIG.LLM_MODEL },
-        prompt: LLM_PROMPT,
+        prompt: LLM_PROMPT + "\n\n" + profile.prompt,
         functions: [
           {
             name: "visual_scene",
@@ -87,7 +94,7 @@ export function buildSettings() {
         ]
       },
       speak: { provider: { type: "deepgram", model: AGENT_CONFIG.TTS_MODEL } },
-      greeting: AGENT_CONFIG.GREETING
+      greeting: profile.greeting
     },
     flags: { history: true }
   };

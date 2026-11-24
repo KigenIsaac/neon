@@ -508,3 +508,14 @@ CI runs linting, TypeScript checking, a production dependency audit, and a produ
 The architecture is intentionally designed to explore the intersection of:
 
 **AI × Voice × WebSockets × Audio × Persistent State × Interactive UI**
+
+
+## Kenyan-first conversation profiles
+
+NEON defaults to Kenyan English, with Nova-3 vocabulary prompting for local names, institutions and everyday expressions. The conversation profile also guides the LLM on Kenyan English, Kiswahili/Sheng context, KES, East Africa Time and clarification of ambiguous amounts and names.
+
+Before starting, choose Kenyan English, experimental Kiswahili input (English replies), or International English. Preferences are stored on the current browser. End the session to change profiles; a fresh provider session begins with the selected profile. Existing conversation records remain intact.
+
+The current voice remains English Aura-2 Zeus. The Kenyan profile does not supply an en-KE acoustic model or native Kenyan synthesis; Kiswahili input uses Nova-3 sw and is not a guarantee of mixed-language recognition. See [Voice Agent STT documentation](https://developers.deepgram.com/docs/voice-agent-stt-models) and [language expansion](https://developers.deepgram.com/changelog/2026/11/16). No additional credentials are needed for these profiles, subject to the Deepgram account supporting the selected model. If the experimental mode fails, end the session and select Kenyan or International English.
+
+Run npm test to verify locale configuration, and see docs/kenyan-voice-evaluation.md for the manual evaluation procedure. Native Kenyan TTS and acoustic model benchmarks are future work, not enabled features.

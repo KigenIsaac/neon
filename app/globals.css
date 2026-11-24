@@ -637,3 +637,26 @@ body::after {
     transition-duration: .01ms !important;
   }
 }
+
+/* Accessible controls above the existing orb and scene layers. */
+#start-overlay { cursor: default; overflow-y: auto; touch-action: pan-y; }
+.locale-settings { display: grid; gap: .7rem; width: min(100%, 360px); text-align: left; }
+.locale-settings label { font-size: .85rem; color: #b7d9f5; }
+.locale-settings select, .wake-button, .active-voice-profile button {
+  color: #eaf7ff; background: #0b192c; border: 1px solid #38688d;
+  border-radius: 12px; padding: .8rem 1rem; font: inherit; touch-action: manipulation;
+}
+.locale-settings select { width: 100%; min-height: 44px; }
+.locale-settings small { color: #b1c6d9; font-size: .8rem; line-height: 1.5; }
+.wake-button { cursor: pointer; min-height: 44px; }
+.wake-button:hover:not(:disabled), .active-voice-profile button:hover:not(:disabled) { border-color: #5fd0ff; }
+.wake-button:disabled, .locale-settings select:disabled, .active-voice-profile button:disabled { opacity: .55; cursor: not-allowed; }
+.locale-settings select:focus-visible, .wake-button:focus-visible, .active-voice-profile button:focus-visible { outline: 2px solid #5fd0ff; outline-offset: 3px; }
+.locale-error { color: #ffb3bb; }
+.active-voice-profile {
+  position: fixed; z-index: 20; top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right)); display: flex; align-items: center;
+  gap: .6rem; font-size: .75rem; color: #b7d9f5; max-width: calc(100vw - 24px);
+}
+.active-voice-profile button { font-size: .75rem; cursor: pointer; padding: .5rem .7rem; min-height: 36px; }
+@media (max-height: 420px) { #start-overlay { justify-content: flex-start; gap: .75rem; padding: 1rem; } }

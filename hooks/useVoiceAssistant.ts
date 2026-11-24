@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioEngine } from "@/lib/audio/engine";
 import { AGENT_CONFIG, buildSettings } from "@/lib/agent/settings";
+import { DEFAULT_LOCALE, parseVoiceLocale, type VoiceLocale } from "@/lib/agent/localisation";
 import { inferScene } from "@/lib/visuals/heuristics";
 import type { Scene, StatusMode } from "@/types";
 import type { Session } from "@supabase/supabase-js";
@@ -50,7 +51,7 @@ export interface UseVoiceAssistantResult {
   greeting: string;
   scene: Scene | null;
   level: number;
-  start: () => Promise<void>;
+  start: (locale?: VoiceLocale) => Promise<void>;
   shutdown: () => void;
 }
 
@@ -65,6 +66,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
   const [level, setLevel] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const settingsSentRef = useRef(false);
+  const localeRef = useRef<VoiceLocale>(DEFAULT_LOCALE);
+  const generationRef = useRef(0);
   const listeningRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
   const sceneFromToolRef = useRef(false);
@@ -175,7 +178,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       case "Welcome": {
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN && !settingsSentRef.current) {
-          ws.send(JSON.stringify(buildSettings()));
+          ws.send(JSON.stringify(buildSettings(localeRef.current)));
           settingsSentRef.current = true;
         }
         break;
@@ -282,6 +285,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
         wsRef.current.readyState === WebSocket.CONNECTING)
     ) return;
 
+    const generation = generationRef.current;
     setStatus({ mode: "thinking", text: "connecting AI..." });
     settingsSentRef.current = false;
 
@@ -295,25 +299,28 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       }
       token = payload.access_token;
     } catch (err) {
+      if (generation !== generationRef.current || shuttingDownRef.current) return;
       console.error("token fetch failed", err);
       setStatus({ mode: "error", text: "token fetch failed" });
       return;
     }
 
+    if (generation !== generationRef.current || shuttingDownRef.current) return;
     const ws = new WebSocket(AGENT_CONFIG.DEEPGRAM_AGENT_URL, ["bearer", token]);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
-    ws.onopen = () => { reconnectAttemptsRef.current = 0; };
+    ws.onopen = () => { if (wsRef.current === ws) reconnectAttemptsRef.current = 0; };
 
     ws.onmessage = async (event) => {
+      if (wsRef.current !== ws || generation !== generationRef.current) return;
       if (typeof event.data !== "string") {
         const buf = event.data instanceof ArrayBuffer
           ? event.data
           : event.data instanceof Blob
             ? await event.data.arrayBuffer()
             : null;
-        if (buf) engineRef.current?.playPCM(buf);
+        if (buf && wsRef.current === ws && generation === generationRef.current) engineRef.current?.playPCM(buf);
         return;
       }
 
@@ -329,6 +336,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     ws.onerror = (err) => console.error("ws error", err);
 
     ws.onclose = () => {
+      if (wsRef.current !== ws || generation !== generationRef.current) return;
       listeningRef.current = false;
       engineRef.current?.stopMicrophone();
       engineRef.current?.stopPlayback();
@@ -356,20 +364,30 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     };
   }, [connectAgent]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (locale: VoiceLocale = DEFAULT_LOCALE) => {
     if (started || startingRef.current) return;
     if (!session) return;
 
     startingRef.current = true;
+    shuttingDownRef.current = false;
+    const generation = ++generationRef.current;
+    localeRef.current = parseVoiceLocale(locale);
+    conversationIdRef.current = null;
+    reconnectAttemptsRef.current = 0;
+    setTranscript("");
+    setScene(null);
+    lastSceneKeyRef.current = null;
+    sceneStateRef.current = "idle";
+    sceneFromToolRef.current = false;
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Voice session" })
+        body: JSON.stringify({ title: `Voice session · ${localeRef.current}` })
       });
       if (res.ok) {
         const data = (await res.json()) as { id?: unknown };
-        if (typeof data.id === "string") {
+        if (generation === generationRef.current && typeof data.id === "string") {
           conversationIdRef.current = data.id;
         }
       }
@@ -377,6 +395,7 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
       console.warn("conversation create failed", err);
     }
 
+    if (generation !== generationRef.current || shuttingDownRef.current) return;
     const engine = new AudioEngine({
       onMicChunk: (buf) => {
         const ws = wsRef.current;
@@ -400,20 +419,32 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
 
     try {
       await engine.initialize();
+      if (generation !== generationRef.current || shuttingDownRef.current) {
+        await engine.shutdown();
+        return;
+      }
       setGreeting("");
       setStarted(true);
       setStatus({ mode: "thinking", text: "starting..." });
       await connectAgent();
     } catch (err) {
-      console.error("start error", err);
-      setStatus({ mode: "error", text: "initialization failed" });
+      await engine.shutdown();
+      if (generation === generationRef.current) {
+        engineRef.current = null;
+        console.error("start error", err);
+        setStarted(false);
+        setStatus({ mode: "error", text: "initialization failed" });
+      }
     } finally {
-      startingRef.current = false;
+      if (generation === generationRef.current) startingRef.current = false;
     }
   }, [started, session, connectAgent, holdScene, releaseScene]);
 
   const shutdown = useCallback(() => {
     shuttingDownRef.current = true;
+    generationRef.current++;
+    startingRef.current = false;
+    listeningRef.current = false;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (sceneTimerRef.current) clearTimeout(sceneTimerRef.current);
     engineRef.current?.shutdown();
@@ -421,6 +452,8 @@ export function useVoiceAssistant(session: Session | null): UseVoiceAssistantRes
     wsRef.current?.close();
     wsRef.current = null;
     setStarted(false);
+    setLevel(0);
+    setStatus({ mode: "idle", text: "idle" });
   }, []);
 
   useEffect(() => {
